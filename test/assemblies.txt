@@ -1,0 +1,2 @@
+ref_a	/Users/mt1022/Code/hybseq/test/data/ref_a.fa
+ref_b	/Users/mt1022/Code/hybseq/test/data/ref_b.fa

@@ -1,0 +1,5 @@
+sample,assay,fastq_1,fastq_2
+dna_a,dnaseq,test/data/fastq/dna_a_R1.fq.gz,test/data/fastq/dna_a_R2.fq.gz
+dna_b,dnaseq,test/data/fastq/dna_b_R1.fq.gz,test/data/fastq/dna_b_R2.fq.gz
+dna_hybrid,dnaseq,test/data/fastq/dna_hybrid_R1.fq.gz,test/data/fastq/dna_hybrid_R2.fq.gz
+rna_a,rnaseq,test/data/fastq/rna_a.fastq.gz

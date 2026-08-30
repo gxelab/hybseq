@@ -1,2 +1,14 @@
 notebooks/
 tmp/
+TODO.md
+.DS_Store
+
+# Nextflow pipeline
+work/
+results/
+test/results/
+.nextflow/
+.nextflow.log*
+nextflow
+*.svg
+*.dot

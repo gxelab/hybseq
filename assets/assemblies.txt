@@ -1,0 +1,2 @@
+ref_a	/path/to/ref_a.fna.masked
+ref_b	/path/to/ref_b.fna.masked
