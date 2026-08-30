@@ -52,7 +52,7 @@ for f in \
 do
     [ -f "$f" ] || fail "missing expected output: $f"
 done
-for s in dna_a dna_b dna_hybrid; do
+for s in dna_a dna_b dna_hybrid dna_c; do
     for ext in gam gam.log pack vcf.gz vcf.gz.csi; do
         [ -f "$RESULTS/gam/$s.$ext" ] || fail "missing expected output: $RESULTS/gam/$s.$ext"
     done
@@ -71,8 +71,10 @@ for f in \
 do
     [ -f "$f" ] || fail "missing expected output: $f"
 done
-for ext in gam pack vcf.gz vcf.tsv.gz; do
-    [ -f "$RESULTS/rna/rna_a.$ext" ] || fail "missing expected output: $RESULTS/rna/rna_a.$ext"
+for s in rna_a rna_b; do
+    for ext in gam pack vcf.gz vcf.tsv.gz; do
+        [ -f "$RESULTS/rna/$s.$ext" ] || fail "missing expected output: $RESULTS/rna/$s.$ext"
+    done
 done
 [ -z "$(find "$RESULTS" -name '*pruned.pg*' -print -quit)" ] || fail "pruned.pg must not be published (ephemeral intermediate)"
 [ ! -d "$RESULTS/gam" ] || fail "rnaseq workflow must not create results/gam"
@@ -103,12 +105,12 @@ clean
 
 {
     echo "sample,assay,fastq_1,fastq_2"
-    echo "dna_x,dnaseq,test/data/fastq/dna_a_R1.fq.gz,"
+    echo "dna_x,dnaseq,,test/data/fastq/dna_a_R2.fq.gz"
 } > "$tmp_ss"
 if out=$($NF run . -profile $PROFILE -stub-run --run dnaseq --samplesheet "$tmp_ss" 2>&1); then
-    fail "DNA row with empty fastq_2 was accepted"
+    fail "row with missing fastq_1 was accepted"
 fi
-echo "$out" | grep -q "fastq_2 is empty" || fail "empty fastq_2: error message missing"
+echo "$out" | grep -q "fastq_1 missing" || fail "missing fastq_1: error message missing"
 clean
 rm -f "$tmp_ss"
 pass "negative tests"

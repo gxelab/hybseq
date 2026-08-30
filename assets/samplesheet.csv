@@ -1,5 +1,6 @@
 sample,assay,fastq_1,fastq_2
 dna_a,dnaseq,/path/to/dna_a_R1.fq.gz,/path/to/dna_a_R2.fq.gz
-dna_b,dnaseq,/path/to/dna_b_R1.fq.gz,/path/to/dna_b_R2.fq.gz
+dna_b,dnaseq,/path/to/dna_b.fq.gz
 dna_hybrid,dnaseq,/path/to/dna_hybrid_R1.fq.gz,/path/to/dna_hybrid_R2.fq.gz
 rna_a,rnaseq,/path/to/rna_a.fastq.gz
+rna_b,rnaseq,/path/to/rna_b_R1.fq.gz,/path/to/rna_b_R2.fq.gz

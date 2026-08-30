@@ -21,7 +21,7 @@ workflow RNASEQ {
     main:
     ch_rna = samples
         .filter { it[1] == 'rnaseq' }
-        .map { [it[0], it[2], it[4]] }
+        .map { [it[0], it[2], it[3], it[4]] }
         .ifEmpty { error 'No rnaseq samples found in the samplesheet' }
 
     ch_gtf = RENAME_GTF(gtf)

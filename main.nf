@@ -13,8 +13,8 @@ include { RNASEQ }    from './workflows/rnaseq'
 
 // Parse and validate the samplesheet.
 // Schema: sample, assay, fastq_1, fastq_2.
-// - dnaseq rows: paired-end (fastq_1 and fastq_2)
-// - rnaseq rows: single-end (fastq_2 empty)
+// Library layout (single-end vs paired-end) is inferred per row for BOTH assays:
+// fastq_2 empty -> single-end, fastq_2 non-empty -> paired-end.
 // No replicate column and no per-sample reference column: every sample maps to
 // one shared graph, and pooled samples are simply one sample (pooling happens
 // upstream of the pipeline).
@@ -33,12 +33,6 @@ def makeSamplesChannel() {
             if (!fq1) { error "fastq_1 missing for sample ${sample} in ${params.samplesheet}" }
             if (!(assay in ['dnaseq', 'rnaseq'])) {
                 error "Unknown assay '${assay}' for sample ${sample} in ${params.samplesheet} (expected dnaseq|rnaseq)"
-            }
-            if (assay == 'rnaseq' && fq2) {
-                error "RNA-seq sample ${sample} must be single-end: fastq_2 must be empty"
-            }
-            if (assay == 'dnaseq' && !fq2) {
-                error "DNA-seq sample ${sample} needs paired reads: fastq_2 is empty"
             }
             def row_idx = idx;
             idx = idx + 1;

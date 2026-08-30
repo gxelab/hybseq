@@ -10,7 +10,7 @@ The pipeline builds one pangenome graph from a reference and one or more additio
 
 1. Build the pangenome graph with **Minigraph-Cactus 3.1.4** (`cactus-pangenome`, GBZ/GFA/VCF outputs, giraffe mapping indexes)
 2. Rebuild a distance index as `<outname>.dist2` with `vg index -j`
-3. Map paired reads to the graph with **vg giraffe** (vg 1.73)
+3. Map reads to the graph with **vg giraffe** (vg 1.73; single-end or paired-end)
 4. Compute read support with **vg pack** (`-Q 5`)
 5. Call variants per sample with **vg call** (`-z -a`)
 6. Index, merge and tabulate all samples with **bcftools** (`index -f` → `merge` → `query`)
@@ -20,7 +20,7 @@ The pipeline builds one pangenome graph from a reference and one or more additio
 1. Rewrite `NC_`/`NW_` contig prefixes in the GTF to `<ref>#0#` so they match GBZ haplotype-path names (`bin/rename_gtf_for_vg.sh`)
 2. Build the spliced pangenome graph with **vg rna** (PackedGraph, `--use-hap-ref --gbz-format`)
 3. Index: `vg index -x` (xg) → `vg prune` → `vg index -g` (GCSA) → `vg snarls` → `vg index -j` (dist)
-4. Map single-end reads with **vg mpmap** (`-n RNA -l short`)
+4. Map reads with **vg mpmap** (`-n RNA -l short`; single-end or paired-end)
 5. Read support (**vg pack**, `-Q 5`) and variant calling (**vg call**, `-z -a`) on the spliced graph
 6. Per-sample tabulation with **bcftools query** (no merge is performed for RNA-seq)
 
@@ -29,10 +29,10 @@ The pipeline builds one pangenome graph from a reference and one or more additio
 | | DNA-seq | RNA-seq |
 |---|---|---|
 | Graph mapped against | GBZ (`<outname>.gbz`) | Spliced PackedGraph built by `vg rna` from the same GBZ |
-| Mapper | `vg giraffe -Z gbz -m min -z zipcodes -d dist`, **paired-end** (`-f R1 -f R2`) | `vg mpmap -x xg -g gcsa -d dist -n RNA -l short`, **single-end** (one `-f`) |
+| Mapper | `vg giraffe -Z gbz -m min -z zipcodes -d dist`, one `-f` per read file | `vg mpmap -x xg -g gcsa -d dist -n RNA -l short`, one `-f` per read file |
 | Read support / variant call inputs | `-x <outname>.gbz`, cactus snarls | `-x <outname>_spliced.xg`, `<outname>_spliced.snarls` |
 | VCF aggregation | `bcftools index` + **`bcftools merge`** of all samples, then one `query` | **per-sample** `bcftools query`, no merge |
-| Reads per sample | paired-end | single-end |
+| Reads per sample | single-end or paired-end (inferred from the samplesheet) | single-end or paired-end (inferred from the samplesheet) |
 
 ## Inputs
 
@@ -47,14 +47,17 @@ CSV with header and four columns:
 ```csv
 sample,assay,fastq_1,fastq_2
 dna_a,dnaseq,/path/to/dna_a_R1.fq.gz,/path/to/dna_a_R2.fq.gz
+dna_b,dnaseq,/path/to/dna_b.fq.gz
+dna_hybrid,dnaseq,/path/to/dna_hybrid_R1.fq.gz,/path/to/dna_hybrid_R2.fq.gz
 rna_a,rnaseq,/path/to/rna_a.fastq.gz
+rna_b,rnaseq,/path/to/rna_b_R1.fq.gz,/path/to/rna_b_R2.fq.gz
 ```
 
 - `sample`: sample id (used as `vg call -s` and as the output file prefix)
-- `assay`: `dnaseq` (paired-end) or `rnaseq` (single-end)
-- `fastq_1` / `fastq_2`: read paths; `fastq_2` must be empty for `rnaseq` rows — simply omit the trailing column (missing columns are padded with empty strings)
+- `assay`: `dnaseq` or `rnaseq`
+- `fastq_1` / `fastq_2`: read paths. **Library layout is inferred** for both assays: `fastq_2` empty → single-end, non-empty → paired-end. For single-end rows simply omit the trailing column (missing columns are padded with empty strings).
 
-Validation: unknown assays, RNA rows with a second read file, and DNA rows without one are rejected with explicit errors.
+Validation: unknown assays and rows without `fastq_1` are rejected with explicit errors.
 
 There is no replicate column and no per-sample reference column: every sample maps to the *same* graph. Pooled samples are simply one sample — pooling happens upstream of the pipeline.
 
@@ -130,4 +133,4 @@ Published under `--outdir` (`results/` by default):
 
 ## Smoke test
 
-`bash test/run_smoke.sh` (requires the Nextflow CLI at `./nextflow`, Nextflow ≥ 24.10) validates pipeline syntax, channel wiring, module I/O contracts and the bin script using tiny synthetic inputs (neutral names: `ref_a`/`ref_b`, `dna_a`/`dna_b`/`dna_hybrid`/`rna_a`). Everything runs with `-stub-run` — process stubs only, no containers, **no biological results are produced**. Steps: bin script unit check → `nextflow config` parse → `--run dnaseq` → `--run rnaseq` → default `both` (single shared reference in the DAG) → negative samplesheet tests.
+`bash test/run_smoke.sh` (requires the Nextflow CLI at `./nextflow`, Nextflow ≥ 24.10) validates pipeline syntax, channel wiring, module I/O contracts and the bin script using tiny synthetic inputs (neutral names: `ref_a`/`ref_b`, `dna_a`/`dna_b`/`dna_hybrid`/`dna_c`, `rna_a`/`rna_b` — covering all four assay/layout combinations). Everything runs with `-stub-run` — process stubs only, no containers, **no biological results are produced**. Steps: bin script unit check → `nextflow config` parse → `--run dnaseq` → `--run rnaseq` → default `both` (single shared reference in the DAG) → negative samplesheet tests.
