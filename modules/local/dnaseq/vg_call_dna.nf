@@ -16,6 +16,7 @@ process VG_CALL_DNA {
 
     script:
     """
+    mkdir -p gam
     vg call ${gbz} -r ${snarls} -k ${pack} -s ${sample} -z -a -t ${task.cpus} \\
         | bgzip -c > gam/${sample}.vcf.gz
     """

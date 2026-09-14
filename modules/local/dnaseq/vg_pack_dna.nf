@@ -14,6 +14,7 @@ process VG_PACK_DNA {
     tuple val(sample), path("gam/${sample}.pack"), val(idx), emit: pack
 
     script:
+    mkdir -p gam
     """
     vg pack -x ${gbz} -g ${gam} -o gam/${sample}.pack -t ${task.cpus} -Q ${params.min_mapq}
     """

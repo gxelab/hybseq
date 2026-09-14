@@ -14,6 +14,7 @@ process VG_INDEX_DIST_RNA {
 
     script:
     """
+    mkdir -p gfa
     vg index -j gfa/${params.outname}_spliced.dist ${xg}
     """
 

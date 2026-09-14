@@ -16,6 +16,7 @@ process BCFTOOLS_QUERY_RNA {
 
     script:
     """
+    mkdir -p rna
     bcftools query -f '%CHROM\\t%POS\\t%ID\\t%REF\\t%ALT\\t%QUAL\\t%FILTER[\\t%GT\\t%DP\\t%AD{0}\\t%AD{1}\\t%GQ]\\n' \\
         ${vcf} | gzip -c > rna/${sample}.vcf.tsv.gz
     """

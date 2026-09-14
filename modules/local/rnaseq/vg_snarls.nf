@@ -15,6 +15,7 @@ process VG_SNARLS {
 
     script:
     """
+    mkdir -p gfa
     vg snarls ${pg} > gfa/${params.outname}_spliced.snarls
     """
 

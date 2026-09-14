@@ -15,6 +15,7 @@ process VG_PACK_RNA {
 
     script:
     """
+    mkdir -p rna
     vg pack -x ${xg} -g ${gam} -o rna/${sample}.pack -t ${task.cpus} -Q ${params.min_mapq}
     """
 

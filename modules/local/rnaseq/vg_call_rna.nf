@@ -18,6 +18,7 @@ process VG_CALL_RNA {
     script:
     def call_sample = params.rna_call_sample ?: sample
     """
+    mkdir -p rna
     vg call ${xg} -r ${snarls} -k ${pack} -s ${call_sample} -z -a -t ${task.cpus} \\
         | bgzip -c > rna/${sample}.vcf.gz
     """

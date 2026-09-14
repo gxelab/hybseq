@@ -14,6 +14,7 @@ process VG_INDEX_XG {
 
     script:
     """
+    mkdir -p gfa
     vg index -x gfa/${params.outname}_spliced.xg ${pg}
     """
 

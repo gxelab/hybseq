@@ -16,6 +16,7 @@ process VG_INDEX_DIST2 {
 
     script:
     """
+    mkdir -p gfa
     vg index -j gfa/${params.outname}.dist2 ${gbz}
     """
 

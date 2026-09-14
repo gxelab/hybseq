@@ -15,6 +15,7 @@ process BCFTOOLS_QUERY_DNA {
 
     script:
     """
+    mkdir -p gam
     bcftools query -f '%CHROM\\t%POS\\t%ID\\t%REF\\t%ALT\\t%QUAL\\t%FILTER[\\t%GT\\t%DP\\t%AD{0}\\t%AD{1}\\t%GQ]\\n' \\
         ${combined_vcf} | gzip -c > gam/combined.vcf.tsv.gz
     """
