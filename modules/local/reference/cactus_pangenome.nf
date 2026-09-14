@@ -43,6 +43,9 @@ process CACTUS_PANGENOME {
         --mapCores ${params.cactus_map_cores} \\
         --batchSystem single_machine \\
         --logFile gfa/${params.outname}.log
+
+    gunzip -c gfa/${params.outname}.gfa.gz > gfa/${params.outname}.gfa
+    gunzip -c gfa/${params.outname}.vcf.gz > gfa/${params.outname}.vcf
     """
 
     stub:
