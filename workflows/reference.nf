@@ -12,9 +12,8 @@ workflow REFERENCE {
 
     emit:
     gbz      = ch_cactus.gbz
-    dist     = ch_cactus.dist
+    dist     = ch_dist2.dist
     min      = ch_cactus.min
     zipcodes = ch_cactus.zipcodes
     snarls   = ch_cactus.snarls
-    dist2    = ch_dist2.dist2
 }

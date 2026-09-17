@@ -10,7 +10,7 @@ include { BCFTOOLS_QUERY_DNA } from '../modules/local/dnaseq/bcftools_query_dna'
 workflow DNASEQ {
     take:
     gbz         // path: <outname>.gbz
-    dist        // path: <outname>.dist (cactus-produced; giraffe -d)
+    dist        // path: <outname>.dist (rebuilt by VG_INDEX_DIST2; giraffe -d)
     min         // path: <outname>.shortread.withzip.min
     zipcodes    // path: <outname>.shortread.zipcodes
     snarls      // path: <outname>.snarls

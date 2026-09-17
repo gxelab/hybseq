@@ -33,7 +33,7 @@ main.nf
 
 | Workflow | take | emit |
 |---|---|---|
-| `REFERENCE` | `assemblies` (seqfile path) | `gbz`, `dist`, `min`, `zipcodes`, `snarls`, `dist2` |
+| `REFERENCE` | `assemblies` (seqfile path) | `gbz`, `dist`, `min`, `zipcodes`, `snarls` |
 | `DNASEQ` | `gbz`, `dist`, `min`, `zipcodes`, `snarls`, `samples` (`[sample,assay,fq1,fq2,idx]`) | `combined_vcf`, `tsv` |
 | `RNASEQ` | `gbz`, `gtf`, `samples` | `tsv` |
 
@@ -52,11 +52,12 @@ cactus-pangenome js <assemblies> \
     --batchSystem single_machine --logFile gfa/<outname>.log
 gunzip -c gfa/<outname>.gfa.gz > gfa/<outname>.gfa
 gunzip -c gfa/<outname>.vcf.gz > gfa/<outname>.vcf
+mv gfa/<outname>.dist gfa/<outname>.dist.bak
 ```
 
-The Toil jobstore (`js/`) stays in the Nextflow work directory and is never published.
+The Toil jobstore (`js/`) stays in the Nextflow work directory and is never published. The distance index cactus produced is archived as `<outname>.dist.bak` inside the task, so `CACTUS_PANGENOME` publishes no file named `<outname>.dist` (which avoids racing the promoted index, see below).
 
-`VG_INDEX_DIST2` then runs `vg index -j gfa/<outname>.dist2 gfa/<outname>.gbz`. This rebuilds a distance index (as the notebook did after cactus), but **mapping uses the cactus-produced `<outname>.dist`**; `dist2` is published and consumed by nothing downstream.
+`VG_INDEX_DIST2` then rebuilds the distance index and promotes it to the primary filename: `vg index -j gfa/<outname>.dist2 gfa/<outname>.gbz`, then `mv gfa/<outname>.dist2 gfa/<outname>.dist`. The cactus index was already renamed to `<outname>.dist.bak`, so the published `<outname>.dist` is the rebuilt index and every `dist` consumer (`vg giraffe -d`) uses it — exactly the notebook sequence (S05 L26–28). `<outname>.dist2` is an intermediate and is never published.
 
 ## DNA-seq (pool-seq) workflow
 
@@ -122,8 +123,8 @@ Notes:
 
 | Process | Tool | Published (relative to `--outdir`) |
 |---|---|---|
-| `CACTUS_PANGENOME` | `cactus-pangenome` | `gfa/<outname>.gbz/.dist/.shortread.withzip.min/.shortread.zipcodes/.snarls/.log/.gfa/.vcf` |
-| `VG_INDEX_DIST2` | `vg index -j` | `gfa/<outname>.dist2` |
+| `CACTUS_PANGENOME` | `cactus-pangenome` | `gfa/<outname>.gbz/.dist.bak/.shortread.withzip.min/.shortread.zipcodes/.snarls/.log/.gfa/.vcf` |
+| `VG_INDEX_DIST2` | `vg index -j` | `gfa/<outname>.dist` |
 | `VG_GIRAFFE` | `vg giraffe` | `gam/<sample>.gam`, `gam/<sample>.gam.log` |
 | `VG_PACK_DNA` | `vg pack` | `gam/<sample>.pack` |
 | `VG_CALL_DNA` | `vg call \| bgzip` | `gam/<sample>.vcf.gz` |
@@ -149,7 +150,7 @@ Notes:
 | Pipeline stage | Source |
 |---|---|
 | Pangenome graph build (`cactus-pangenome`) | [`notebooks/S05_pangenome_poolseq.qmd`](notebooks/S05_pangenome_poolseq.qmd) L23 |
-| `<outname>.dist2` rebuild | S05 L26 |
+| Distance index rebuild + promotion (`.dist` → `.dist.bak`, `.dist2` → `.dist`) | S05 L26–28 |
 | DNA mapping (`vg giraffe`) | S05 L30–65; clean one-line version L208 |
 | Read support (`vg pack -Q 5`) | S05 L70–94; L211 |
 | Variant calling (`vg call -z -a`) | S05 L99–101; L214 |
@@ -168,6 +169,7 @@ Notes:
 
 - **Both layouts in both assays.** The notebooks show paired-end DNA (S05) and single-end RNA (S06); the pipeline infers single-end vs paired-end per row for both assays from an empty `fastq_2`.
 - **Deterministic merge order.** DNA merge follows samplesheet order via the carried row index instead of shell-glob order (see DNA-seq section).
+- **Distance index promotion.** S05 L26–28 rebuilds the distance index after cactus and renames files on the fly. The pipeline encodes the same three commands, split by ownership: `CACTUS_PANGENOME` archives its index as `<outname>.dist.bak`, and `VG_INDEX_DIST2` builds `<outname>.dist2` and promotes it to `<outname>.dist`. Only one process ever publishes a file named `<outname>.dist` (`publish_dir_mode` is `copy`, so two publishers would race). The published layout has `<outname>.dist` (rebuilt, consumed by `vg giraffe -d`) and `<outname>.dist.bak` (archived cactus index); `<outname>.dist2` never reaches `--outdir`.
 - **Explicit mapper format.** `vg mpmap` passes `-F GAM` explicitly; the notebook showed it inconsistently.
 - **Graph artifacts as plain files.** The notebook ran cactus manually under apptainer and used the `.gz` artifacts; the pipeline `gunzip`s `<outname>.gfa.gz` → `.gfa` and `<outname>.vcf.gz` → `.vcf` so the published layout is uniform and predictable.
 - **`ref_name` couples cactus and the GTF.** `params.ref_name` is both `cactus --reference` and the GTF rename prefix, so it must equal the reference sample name in the seqfile, or the renamed GTF contig names will not match GBZ haplotype paths.
@@ -179,7 +181,6 @@ Notes:
 ## Known limitations
 
 - `vg call | bgzip -c` requires `bgzip` inside the vg image. vgteam images ship htslib tools; verify at the first real run or override `--vg_container`.
-- `<outname>.dist2` is built as a separate step but consumed by nothing: mapping uses the cactus-produced `<outname>.dist`, and `dist2` is only published.
 - `--viz` is passed to `cactus-pangenome` as is; the cactus image must provide its dependencies (graphviz/odgi).
 - `bcftools_container` uses a placeholder tag (`1.19--h3ea31c5_0`). Pin it to a tag available on your cluster; no particular version is required.
 - Cactus resources are estimates (64 GB RAM / 48 h per process) and must be tuned to the assemblies; all other processes default to 1 CPU, 8 GB, 8 h, with per-process overrides in `nextflow.config`.
@@ -203,7 +204,7 @@ Steps:
 
 1. **bin script unit check** — `bash -n bin/rename_gtf_for_vg.sh`, then run it on `test/data/ref_a.gtf` and `diff` the result against `test/data/expected_ref_a.gtf` (verifies `NC_`/`NW_` → `ref_a#0#` rewriting).
 2. **Config parse** — `./nextflow config . -profile test`.
-3. **`--run dnaseq`** — asserts `gfa/test.gbz`, `.dist`, `.dist2`, `.shortread.withzip.min`, `.shortread.zipcodes`, `.snarls`, `.log`, `gam/combined.vcf.gz`, `gam/combined.vcf.tsv.gz`, and `gam/<sample>.{gam,gam.log,pack,vcf.gz,vcf.gz.csi}` for `dna_a`, `dna_b`, `dna_hybrid`, `dna_c`; also asserts that `results/rna` is **not** created.
+3. **`--run dnaseq`** — asserts `gfa/test.gbz`, `.dist`, `.dist.bak`, `.shortread.withzip.min`, `.shortread.zipcodes`, `.snarls`, `.log`, `gam/combined.vcf.gz`, `gam/combined.vcf.tsv.gz`, and `gam/<sample>.{gam,gam.log,pack,vcf.gz,vcf.gz.csi}` for `dna_a`, `dna_b`, `dna_hybrid`, `dna_c`; also asserts that no `*.dist2` is published (intermediate) and that `results/rna` is **not** created.
 4. **`--run rnaseq`** — asserts `gfa/ref_a.gtf`, `gfa/test_spliced.{pg,xg,gcsa,gcsa.lcp,snarls,dist}` and `rna/<sample>.{gam,pack,vcf.gz,vcf.tsv.gz}` for `rna_a`, `rna_b`; asserts no `*pruned.pg*` is published (ephemeral intermediate) and that `results/gam` is **not** created.
 5. **Default entry (`both`)** — one run with `-with-dag`, asserting both DNA and RNA outputs exist, the DAG file is non-empty, and `CACTUS_PANGENOME` appears exactly once in the DAG (single shared reference).
 6. **Negative tests** — samplesheets with a bogus assay and with an empty `fastq_1` must fail, and the error messages must contain `Unknown assay` / `fastq_1 missing`.
@@ -222,4 +223,3 @@ See the Usage section of [`README.md`](README.md) for command lines. Additional 
 ## Open items
 
 - Long-read RNA-seq (S07) is an empty notebook stub and has no implementation.
-- `TODO.md` (gitignored) holds the original build brief; its requirements are satisfied except for long-read support. The provenance table above fills the documentation-provenance requirement.

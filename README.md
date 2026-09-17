@@ -9,7 +9,7 @@ The pipeline builds one pangenome graph from a reference and one or more additio
 ### DNA-seq / pool-seq
 
 1. Build the pangenome graph with **Minigraph-Cactus 3.1.4** (`cactus-pangenome`, GBZ/GFA/VCF outputs, giraffe mapping indexes)
-2. Rebuild a distance index as `<outname>.dist2` with `vg index -j`
+2. Rebuild the distance index after cactus: archive the cactus-produced `<outname>.dist` as `<outname>.dist.bak`, build the index with `vg index -j`, and promote the rebuilt index to `<outname>.dist`
 3. Map reads to the graph with **vg giraffe** (vg 1.73; single-end or paired-end)
 4. Compute read support with **vg pack** (`-Q 5`)
 5. Call variants per sample with **vg call** (`-z -a`)
@@ -119,11 +119,11 @@ Published under `--outdir` (`results/` by default):
 
 | dir | contents |
 |---|---|
-| `gfa/` | graph + index artifacts: `<outname>.gbz/.dist/.dist2/.shortread.withzip.min/.shortread.zipcodes/.snarls/.log/.gfa/.vcf`, `<ref_name>.gtf`, `<outname>_spliced.pg/.xg/.gcsa/.gcsa.lcp/.snarls/.dist` |
+| `gfa/` | graph + index artifacts: `<outname>.gbz/.dist/.dist.bak/.shortread.withzip.min/.shortread.zipcodes/.snarls/.log/.gfa/.vcf`, `<ref_name>.gtf`, `<outname>_spliced.pg/.xg/.gcsa/.gcsa.lcp/.snarls/.dist` |
 | `gam/` | per DNA sample: `<sample>.gam`, `<sample>.gam.log`, `<sample>.pack`, `<sample>.vcf.gz`, `<sample>.vcf.gz.csi`; combined: `combined.vcf.gz`, `combined.vcf.tsv.gz` |
 | `rna/` | per RNA sample: `<sample>.gam`, `<sample>.pack`, `<sample>.vcf.gz`, `<sample>.vcf.tsv.gz` |
 
-`<outname>_spliced.pruned.pg` is an ephemeral intermediate and is never published. The TSVs carry one row per VCF record (CHROM, POS, ID, REF, ALT, QUAL, FILTER, per-sample GT, DP, AD{0}, AD{1}, GQ) and are suited as inputs to downstream tabular analyses.
+`<outname>_spliced.pruned.pg` and `<outname>.dist2` are intermediates and are never published; `<outname>.dist.bak` is the archived cactus distance index and `<outname>.dist` is the rebuilt index used for mapping. The TSVs carry one row per VCF record (CHROM, POS, ID, REF, ALT, QUAL, FILTER, per-sample GT, DP, AD{0}, AD{1}, GQ) and are suited as inputs to downstream tabular analyses.
 
 ## AI assistance
 

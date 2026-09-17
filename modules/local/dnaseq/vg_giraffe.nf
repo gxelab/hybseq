@@ -3,8 +3,8 @@
 // the layout is inferred from the samplesheet. fq2 is declared `val` so empty
 // strings are accepted (it is still validated via file(..., checkIfExists: true)
 // when the samplesheet is parsed).
-// The -d index is the cactus-produced <outname>.dist (not <outname>.dist2, see
-// VG_INDEX_DIST2).
+// The -d index is the rebuilt <outname>.dist that VG_INDEX_DIST2 promotes from
+// <outname>.dist2; the cactus-produced index is archived as <outname>.dist.bak.
 process VG_GIRAFFE {
     tag "$sample"
 

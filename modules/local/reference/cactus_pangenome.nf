@@ -1,6 +1,8 @@
 // Build the pangenome graph with Minigraph-Cactus (cactus 3.1.4).
 // Runs as a managed foreground task; --logFile is written inside --outDir so the
 // published layout under results/gfa/ is uniform.
+// The cactus-produced distance index is archived as <outname>.dist.bak; the
+// primary <outname>.dist is replaced by the index VG_INDEX_DIST2 rebuilds.
 process CACTUS_PANGENOME {
     tag "$params.outname"
 
@@ -13,7 +15,7 @@ process CACTUS_PANGENOME {
 
     output:
     path "gfa/${params.outname}.gbz",                   emit: gbz
-    path "gfa/${params.outname}.dist",                  emit: dist
+    path "gfa/${params.outname}.dist.bak",              emit: dist_bak
     path "gfa/${params.outname}.shortread.withzip.min", emit: min
     path "gfa/${params.outname}.shortread.zipcodes",    emit: zipcodes
     path "gfa/${params.outname}.snarls",                emit: snarls
@@ -46,13 +48,14 @@ process CACTUS_PANGENOME {
 
     gunzip -c gfa/${params.outname}.gfa.gz > gfa/${params.outname}.gfa
     gunzip -c gfa/${params.outname}.vcf.gz > gfa/${params.outname}.vcf
+    mv gfa/${params.outname}.dist gfa/${params.outname}.dist.bak
     """
 
     stub:
     """
     mkdir -p gfa
     touch gfa/${params.outname}.gbz \\
-          gfa/${params.outname}.dist \\
+          gfa/${params.outname}.dist.bak \\
           gfa/${params.outname}.shortread.withzip.min \\
           gfa/${params.outname}.shortread.zipcodes \\
           gfa/${params.outname}.snarls \\

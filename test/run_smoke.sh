@@ -45,7 +45,7 @@ pass "nextflow config"
 echo "== 3. DNA-seq workflow (stub-run) =="
 $NF run . -profile $PROFILE -stub-run --run dnaseq
 for f in \
-    "$RESULTS/gfa/test.gbz" "$RESULTS/gfa/test.dist" "$RESULTS/gfa/test.dist2" \
+    "$RESULTS/gfa/test.gbz" "$RESULTS/gfa/test.dist" "$RESULTS/gfa/test.dist.bak" \
     "$RESULTS/gfa/test.shortread.withzip.min" "$RESULTS/gfa/test.shortread.zipcodes" \
     "$RESULTS/gfa/test.snarls" "$RESULTS/gfa/test.log" \
     "$RESULTS/gam/combined.vcf.gz" "$RESULTS/gam/combined.vcf.tsv.gz"
@@ -57,6 +57,7 @@ for s in dna_a dna_b dna_hybrid dna_c; do
         [ -f "$RESULTS/gam/$s.$ext" ] || fail "missing expected output: $RESULTS/gam/$s.$ext"
     done
 done
+[ -z "$(find "$RESULTS" -name '*.dist2' -print -quit)" ] || fail "dist2 must not be published (intermediate)"
 [ ! -d "$RESULTS/rna" ] || fail "dnaseq workflow must not create results/rna"
 pass "dnaseq workflow outputs complete"
 clean
