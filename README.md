@@ -1,6 +1,6 @@
 # hybseq
 
-A Nextflow DSL2 pipeline for **pangenome-graph based processing of interspecies hybrid genomic data** — pooled DNA-seq and RNA-seq — built with [Minigraph-Cactus](https://github.com/ComparativeGenomicsToolkit/cactus) and [vg](https://github.com/vgteam/vg).
+A Nextflow DSL2 pipeline for **pangenome-graph based processing of interspecies hybrid genomic data** (DNA-seq and RNA-seq) built with [Minigraph-Cactus](https://github.com/ComparativeGenomicsToolkit/cactus) and [vg](https://github.com/vgteam/vg).
 
 The pipeline builds one pangenome graph from a reference and one or more additional assemblies, maps short reads to it, computes read support, calls variants per sample, and tabulates the results. DNA-seq and RNA-seq are separate workflows that share the same reference graph.
 
@@ -93,7 +93,7 @@ Container images (versions the pipeline is developed and tested against):
 - `apptainer` — run with Apptainer; local SIF paths override the registry images:
   `-profile apptainer --vg_sif /path/to/vg.sif --cactus_sif /path/to/cactus.sif --bcftools_sif /path/to/bcftools.sif`
   Bind-mount your data directories the same way you would with `apptainer exec`, e.g. `-c 'apptainer.runOptions = "--bind /my/data"'`.
-- `test` — tiny synthetic inputs for the smoke test (below)
+- `test` — tiny synthetic inputs for the smoke test (see [development.md](development.md#smoke-test))
 
 Resource note: cactus RAM/time are config defaults (64 GB / 48 h) and should be adjusted to your assemblies. The cactus Toil jobstore (`js/`) stays in the Nextflow work directory and is never published.
 
@@ -125,12 +125,18 @@ Published under `--outdir` (`results/` by default):
 
 `<outname>_spliced.pruned.pg` is an ephemeral intermediate and is never published. The TSVs carry one row per VCF record (CHROM, POS, ID, REF, ALT, QUAL, FILTER, per-sample GT, DP, AD{0}, AD{1}, GQ) and are suited as inputs to downstream tabular analyses.
 
-## Notes and known limitations
+## AI assistance
 
-- `vg call | bgzip -c` requires `bgzip` inside the vg image (vgteam images ship htslib tools); verify at first real run, or override `--vg_container`.
-- The pipeline builds `<outname>.dist2` as a separate step, but mapping uses the primary `<outname>.dist` produced by cactus-pangenome; `dist2` is published but consumed by nothing downstream.
-- `--viz` is passed to cactus-pangenome as is; the cactus image must provide its dependencies (graphviz/odgi).
+This pipeline and its documentation were developed with AI assistance. AI-generated content was reviewed and revised by the authors, who are responsible for the final content.
 
-## Smoke test
+| | |
+|---|---|
+| Models | DeepSeek V4 Flash / Pro |
+| Harness | deepseek-harness + Claude Code |
 
-`bash test/run_smoke.sh` (requires the Nextflow CLI at `./nextflow`, Nextflow ≥ 24.10) validates pipeline syntax, channel wiring, module I/O contracts and the bin script using tiny synthetic inputs (neutral names: `ref_a`/`ref_b`, `dna_a`/`dna_b`/`dna_hybrid`/`dna_c`, `rna_a`/`rna_b` — covering all four assay/layout combinations). Everything runs with `-stub-run` — process stubs only, no containers, **no biological results are produced**. Steps: bin script unit check → `nextflow config` parse → `--run dnaseq` → `--run rnaseq` → default `both` (single shared reference in the DAG) → negative samplesheet tests.
+
+## License
+
+This project is released under the MIT License. See [`LICENSE`](LICENSE) for the full text.
+
+Copyright (c) 2026 RNA GxE lab @ LZU.

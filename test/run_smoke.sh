@@ -5,7 +5,7 @@
 # with tiny synthetic inputs (neutral names). Everything runs with -stub-run (process
 # stubs), so no containers or real tools are needed and NO biological results are
 # produced -- this is a connectivity/syntax test, not a data analysis. Real-data
-# validation is documented in the README.
+# validation is documented in development.md.
 #
 # Usage: bash test/run_smoke.sh
 set -euo pipefail
