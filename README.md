@@ -17,7 +17,7 @@ The pipeline builds one pangenome graph from a reference and one or more additio
 
 ### RNA-seq
 
-1. Rewrite `NC_`/`NW_` contig prefixes in the GTF to `<ref>#0#` so they match GBZ haplotype-path names (`bin/rename_gtf_for_vg.sh`)
+1. Prefix every GTF contig with `<ref>#0#` so the names match GBZ haplotype-path names — any contig naming scheme (`bin/rename_gtf_for_vg.sh`)
 2. Build the spliced pangenome graph with **vg rna** (PackedGraph, `--use-hap-ref --gbz-format`)
 3. Index: `vg index -x` (xg) → `vg prune` → `vg index -g` (GCSA) → `vg snarls` → `vg index -j` (dist)
 4. Map reads with **vg mpmap** (`-n RNA -l short`; single-end or paired-end)
@@ -67,7 +67,7 @@ All settings live in [`nextflow.config`](nextflow.config):
 
 | param | default | meaning |
 |---|---|---|
-| `ref_name` | `ref` | cactus `--reference`; GTF rename prefix; must match the seqfile reference name |
+| `ref_name` | `ref` | cactus `--reference`; GTF rename prefix (applied to every contig name, whatever the naming scheme); must match the seqfile reference name |
 | `outname` | `pangenome` | cactus `--outName`; prefixes all graph artifacts |
 | `giraffe_threads` / `pack_threads` | 16 | `vg giraffe` / `vg pack` `-t` |
 | `call_threads` | 4 | `vg call` `-t` |

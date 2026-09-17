@@ -13,7 +13,7 @@ Workflow internals, provenance, design decisions, known limitations, and the smo
 | `modules/local/reference/` | `CACTUS_PANGENOME`, `VG_INDEX_DIST2` |
 | `modules/local/dnaseq/` | `VG_GIRAFFE`, `VG_PACK_DNA`, `VG_CALL_DNA`, `BCFTOOLS_INDEX`, `BCFTOOLS_MERGE_DNA`, `BCFTOOLS_QUERY_DNA` |
 | `modules/local/rnaseq/` | `RENAME_GTF`, `VG_RNA`, `VG_INDEX_XG`, `VG_PRUNE`, `VG_INDEX_GCSA`, `VG_SNARLS`, `VG_INDEX_DIST_RNA`, `VG_MPMAP`, `VG_PACK_RNA`, `VG_CALL_RNA`, `BCFTOOLS_QUERY_RNA` |
-| `bin/rename_gtf_for_vg.sh` | Rewrites `NC_`/`NW_` GTF contig prefixes to `<sample>#0#` |
+| `bin/rename_gtf_for_vg.sh` | Prefixes every non-comment GTF contig with `<sample>#0#`, whatever the contig naming scheme |
 | `assets/` | Placeholder samplesheet and cactus seqfile |
 | `test/` | Synthetic stub-run inputs and `run_smoke.sh` |
 | `nextflow.config` | All params, per-process resources, `docker`/`apptainer`/`test` profiles |
@@ -90,8 +90,8 @@ bcftools query -f '%CHROM\t%POS\t%ID\t%REF\t%ALT\t%QUAL\t%FILTER[\t%GT\t%DP\t%AD
 ## RNA-seq workflow
 
 ```bash
-# 1. rename GTF contigs to match haplotype-path names in the GBZ
-sed -E 's/^(NC_|NW_)/<ref_name>#0#\1/' <gtf> > gfa/<ref_name>.gtf
+# 1. rename GTF contigs to match haplotype-path names in the GBZ (any contig naming scheme)
+sed -E 's/^([^#][^\t]*\t)/<ref_name>#0#\1/' <gtf> > gfa/<ref_name>.gtf
 
 # 2. spliced graph + indexes
 vg rna -p --threads <cpus> --transcripts gfa/<ref_name>.gtf --use-hap-ref --gbz-format <gbz> \
@@ -114,6 +114,7 @@ bcftools query -f '%CHROM\t%POS\t%ID\t%REF\t%ALT\t%QUAL\t%FILTER[\t%GT\t%DP\t%AD
 
 Notes:
 
+- The contig rename is contig-agnostic: it prefixes the first tab-delimited field of every non-comment line, so `NC_`/`NW_` accessions, `chr*`, `scaffold*` and other schemes all work. Lines starting with `#`, blank lines and lines without a tab are passed through unchanged.
 - `vg rna` output is a PackedGraph; `--gbz-format` is passed because the input is GBZ.
 - `vg prune` output is an ephemeral intermediate for the GCSA build: `VG_PRUNE` declares no `publishDir`, so `*_spliced.pruned.pg` never reaches `--outdir`. `VG_INDEX_GCSA` emits both `.gcsa` and `.gcsa.lcp` because `vg mpmap` needs them adjacent.
 - Snarls are not needed by `vg mpmap` when a dist index is supplied, but they are required by `vg call`; `trivial.snarls` is not needed to build the distance index.
@@ -173,10 +174,11 @@ Notes:
 - **Explicit mapper format.** `vg mpmap` passes `-F GAM` explicitly; the notebook showed it inconsistently.
 - **Graph artifacts as plain files.** The notebook ran cactus manually under apptainer and used the `.gz` artifacts; the pipeline `gunzip`s `<outname>.gfa.gz` → `.gfa` and `<outname>.vcf.gz` → `.vcf` so the published layout is uniform and predictable.
 - **`ref_name` couples cactus and the GTF.** `params.ref_name` is both `cactus --reference` and the GTF rename prefix, so it must equal the reference sample name in the seqfile, or the renamed GTF contig names will not match GBZ haplotype paths.
+- **Contig-agnostic GTF rename.** The notebook's `sed 's/^(NC_|NW_)/<ref>#0#\1/'` (S06 L22) only works for RefSeq-style accessions; reference assemblies routinely use `chr*`, `scaffold*` or other names, so the pipeline prefixes the first tab-delimited field of every non-comment line instead. Comment/blank lines and lines without a tab (not GTF) are passed through unchanged rather than guessed at, and an already-renamed GTF must not be fed in again.
 - **No replicate and no per-sample reference.** Derived from what the notebooks actually require: every sample maps to the one shared graph, and pooled samples are a single sample (pooling happens upstream).
 - **Threshold exposure.** The hard-coded `-Q 5` pack filter became `params.min_mapq` (default 5, i.e. the notebook value); thread counts, cactus cores, and `gcsa_tmpdir` are likewise params.
 - **Pass-through flags.** `--permissiveContigFilter`, `--haplo`, `--chrom-vg clip filter`, `--chrom-og full`, and `--viz` are passed to cactus exactly as in the notebook.
-- **`RENAME_GTF` is container-less.** The rename is a one-line `sed`; it uses the helper in `bin/` (available on `PATH` in the Nextflow script environment) rather than pulling a container.
+- **`RENAME_GTF` is container-less.** The rename is a single contig-agnostic `sed` substitution; it uses the helper in `bin/` (available on `PATH` in the Nextflow script environment) rather than pulling a container.
 
 ## Known limitations
 
@@ -185,7 +187,7 @@ Notes:
 - `bcftools_container` uses a placeholder tag (`1.19--h3ea31c5_0`). Pin it to a tag available on your cluster; no particular version is required.
 - Cactus resources are estimates (64 GB RAM / 48 h per process) and must be tuned to the assemblies; all other processes default to 1 CPU, 8 GB, 8 h, with per-process overrides in `nextflow.config`.
 - `publish_dir_mode` defaults to `copy`, which will copy large GAM/pack files. `symlink` is recommended for real runs.
-- `RENAME_GTF` runs on the host with `sed` and only rewrites `NC_` / `NW_` prefixes. Other contig naming schemes need a different rename rule, and `bin/` must be reachable on `PATH`.
+- `RENAME_GTF` runs on the host with `sed`, so `bin/` must be reachable on `PATH`. It assumes a tab-delimited GTF: lines without a tab are passed through unprefixed rather than guessed at.
 - RNA-seq has no merge step by design, so cross-sample RNA comparison must be done downstream of the per-sample TSVs.
 - No biological validation is automated in this repository: the smoke test is stub-only, and real-data correctness is established by the notebook comparisons (e.g. S05's grenedalf cross-check), not by CI.
 - The `test` profile's `withName` overrides exist because profile-level params do not propagate into the base `process` block; keep them in sync when adding processes.
@@ -202,7 +204,7 @@ Inputs are tiny synthetic files with neutral names (`ref_a`/`ref_b`, `dna_a`/`dn
 
 Steps:
 
-1. **bin script unit check** — `bash -n bin/rename_gtf_for_vg.sh`, then run it on `test/data/ref_a.gtf` and `diff` the result against `test/data/expected_ref_a.gtf` (verifies `NC_`/`NW_` → `ref_a#0#` rewriting).
+1. **bin script unit check** — `bash -n bin/rename_gtf_for_vg.sh`, then run it on `test/data/ref_a.gtf` and `diff` the result against `test/data/expected_ref_a.gtf` (regression guard for the `NC_`/`NW_` case → `ref_a#0#`), plus inline cases asserting that any contig name (`scaffold_b1`, `chr1`, `CM012345.1`, `1`) is prefixed, that comment/blank/non-tab lines pass through unchanged, and that sed-special characters in the sample name are emitted literally.
 2. **Config parse** — `./nextflow config . -profile test`.
 3. **`--run dnaseq`** — asserts `gfa/test.gbz`, `.dist`, `.dist.bak`, `.shortread.withzip.min`, `.shortread.zipcodes`, `.snarls`, `.log`, `gam/combined.vcf.gz`, `gam/combined.vcf.tsv.gz`, and `gam/<sample>.{gam,gam.log,pack,vcf.gz,vcf.gz.csi}` for `dna_a`, `dna_b`, `dna_hybrid`, `dna_c`; also asserts that no `*.dist2` is published (intermediate) and that `results/rna` is **not** created.
 4. **`--run rnaseq`** — asserts `gfa/ref_a.gtf`, `gfa/test_spliced.{pg,xg,gcsa,gcsa.lcp,snarls,dist}` and `rna/<sample>.{gam,pack,vcf.gz,vcf.tsv.gz}` for `rna_a`, `rna_b`; asserts no `*pruned.pg*` is published (ephemeral intermediate) and that `results/gam` is **not** created.

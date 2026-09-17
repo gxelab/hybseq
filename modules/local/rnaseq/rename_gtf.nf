@@ -1,6 +1,7 @@
-// Rewrite NC_/NW_ contig prefixes in the GTF to <ref_name>#0# so they match the
-// haplotype-path names inside the Minigraph-Cactus GBZ. Uses the host sed
-// (no container directive).
+// Prefix every GTF contig with <ref_name>#0# so the names match the haplotype
+// paths inside the Minigraph-Cactus GBZ. The rule is contig-naming-scheme
+// agnostic (NC_/NW_, chr*, scaffold*, ...); comment and blank lines are left
+// alone. Uses the host sed (no container directive).
 process RENAME_GTF {
     tag "${params.ref_name}.gtf"
 

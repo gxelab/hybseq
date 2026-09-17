@@ -36,7 +36,43 @@ tmp_gtf=$(mktemp)
 bash bin/rename_gtf_for_vg.sh test/data/ref_a.gtf ref_a "$tmp_gtf"
 diff "$tmp_gtf" test/data/expected_ref_a.gtf
 rm -f "$tmp_gtf"
-pass "rename_gtf_for_vg.sh rewrites NC_/NW_ prefixes to ref_a#0#"
+pass "rename_gtf_for_vg.sh reproduces the NC_/NW_ fixture (ref_a#0#)"
+
+# Contig-agnostic rule: any contig name is prefixed; comment, blank and non-tab
+# lines pass through unchanged. Tab-delimited fields matter, so the fixtures use
+# literal tabs (printf).
+tmp_in=$(mktemp)
+printf '#!genome-build test\n\
+scaffold_b1\ttest\texon\t1\t2\t.\t+\t.\ttranscript_id "tx1";\n\
+chr1\ttest\texon\t3\t4\t.\t+\t.\ttranscript_id "tx1";\n\
+CM012345.1\ttest\texon\t5\t6\t.\t+\t.\ttranscript_id "tx1";\n\
+1\ttest\texon\t7\t8\t.\t+\t.\ttranscript_id "tx1";\n\
+\n\
+no tabs here\n' > "$tmp_in"
+tmp_out=$(mktemp)
+bash bin/rename_gtf_for_vg.sh "$tmp_in" ref_b "$tmp_out"
+expected=$(mktemp)
+printf '#!genome-build test\n\
+ref_b#0#scaffold_b1\ttest\texon\t1\t2\t.\t+\t.\ttranscript_id "tx1";\n\
+ref_b#0#chr1\ttest\texon\t3\t4\t.\t+\t.\ttranscript_id "tx1";\n\
+ref_b#0#CM012345.1\ttest\texon\t5\t6\t.\t+\t.\ttranscript_id "tx1";\n\
+ref_b#0#1\ttest\texon\t7\t8\t.\t+\t.\ttranscript_id "tx1";\n\
+\n\
+no tabs here\n' > "$expected"
+diff "$tmp_out" "$expected"
+rm -f "$tmp_in" "$tmp_out" "$expected"
+pass "rename_gtf_for_vg.sh prefixes any contig name; comments/blank/non-tab lines pass through"
+
+# A sample name with sed-special characters must be emitted literally.
+tmp_in=$(mktemp)
+printf 'chr1\ttest\texon\t1\t2\t.\t+\t.\ttranscript_id "tx1";\n' > "$tmp_in"
+tmp_out=$(mktemp)
+bash bin/rename_gtf_for_vg.sh "$tmp_in" 'a&b' "$tmp_out"
+expected=$(mktemp)
+printf 'a&b#0#chr1\ttest\texon\t1\t2\t.\t+\t.\ttranscript_id "tx1";\n' > "$expected"
+diff "$tmp_out" "$expected"
+rm -f "$tmp_in" "$tmp_out" "$expected"
+pass "rename_gtf_for_vg.sh handles sed-special characters in the sample name"
 
 echo "== 2. config parses =="
 $NF config . -profile $PROFILE > /dev/null
