@@ -1,4 +1,4 @@
-# hybseq
+# hybseq  <img src="logo_light.svg" align="right" height="138" alt="HybSeq Logo" />
 
 A Nextflow DSL2 pipeline for **pangenome-graph based processing of interspecies hybrid genomic data** (DNA-seq and RNA-seq) built with [Minigraph-Cactus](https://github.com/ComparativeGenomicsToolkit/cactus) and [vg](https://github.com/vgteam/vg).
 

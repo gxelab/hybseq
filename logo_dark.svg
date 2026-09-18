@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="-1 -1 445.41 514" width="445.41" height="514" role="img" aria-labelledby="t d">
+  <title id="t">HybSeq</title>
+  <desc id="d">HybSeq hexagonal app icon, dark build: the pangenome-graph mark above the HybSeq wordmark on a dark hexagon.</desc>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#17253F"/><stop offset="1" stop-color="#080D18"/></linearGradient>
+  </defs>
+  <path d="M 221.71 0 L 443.41 128 L 443.41 384 L 221.71 512 L 0 384 L 0 128 Z" fill="url(#tile)" stroke="#22304A" stroke-width="2"/>
+  <g transform="translate(36.66,83.12) scale(2.50313)">
+    <line x1="20.6" y1="20.6" x2="36.6" y2="20.6" stroke="#8AA6FF" stroke-width="6.5" stroke-linecap="round"/>
+    <line x1="20.6" y1="76.6" x2="36.6" y2="76.6" stroke="#34D3B6" stroke-width="6.5" stroke-linecap="round"/>
+    <line x1="36.6" y1="20.6" x2="56.6" y2="48.6" stroke="#8AA6FF" stroke-width="6.5" stroke-linecap="round"/>
+    <line x1="36.6" y1="76.6" x2="56.6" y2="48.6" stroke="#34D3B6" stroke-width="6.5" stroke-linecap="round"/>
+    <line x1="56.6" y1="48.6" x2="65.7" y2="20.6" stroke="#8AA6FF" stroke-width="6.5" stroke-linecap="round"/>
+    <line x1="65.7" y1="20.6" x2="89.1" y2="20.6" stroke="#8AA6FF" stroke-width="6.5" stroke-linecap="round"/>
+    <line x1="89.1" y1="20.6" x2="108.6" y2="48.6" stroke="#8AA6FF" stroke-width="6.5" stroke-linecap="round"/>
+    <line x1="56.6" y1="48.6" x2="65.7" y2="76.6" stroke="#34D3B6" stroke-width="6.5" stroke-linecap="round"/>
+    <line x1="65.7" y1="76.6" x2="89.1" y2="76.6" stroke="#34D3B6" stroke-width="6.5" stroke-linecap="round"/>
+    <line x1="89.1" y1="76.6" x2="108.6" y2="48.6" stroke="#34D3B6" stroke-width="6.5" stroke-linecap="round"/>
+    <line x1="108.6" y1="48.6" x2="130.6" y2="48.6" stroke="#FFC24B" stroke-width="6.5" stroke-linecap="round"/>
+    <circle cx="20.6" cy="20.6" r="5.6" fill="#8AA6FF" stroke="#0B1220" stroke-width="2"/>
+    <circle cx="20.6" cy="76.6" r="5.6" fill="#34D3B6" stroke="#0B1220" stroke-width="2"/>
+    <circle cx="56.6" cy="48.6" r="6.4" fill="#FFC24B" stroke="#0B1220" stroke-width="2"/>
+    <circle cx="65.7" cy="20.6" r="5.6" fill="#8AA6FF" stroke="#0B1220" stroke-width="2"/>
+    <circle cx="89.1" cy="20.6" r="5.6" fill="#8AA6FF" stroke="#0B1220" stroke-width="2"/>
+    <circle cx="65.7" cy="76.6" r="5.6" fill="#34D3B6" stroke="#0B1220" stroke-width="2"/>
+    <circle cx="89.1" cy="76.6" r="5.6" fill="#34D3B6" stroke="#0B1220" stroke-width="2"/>
+    <circle cx="108.6" cy="48.6" r="7.6" fill="#FFC24B" stroke="#0B1220" stroke-width="2"/>
+  </g>
+  <text x="221.71" y="377.87" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="76" font-weight="700" style="letter-spacing:-1.8px" fill="#FFFFFF">Hyb<tspan fill="#8AA6FF">Seq</tspan></text>
+</svg>
