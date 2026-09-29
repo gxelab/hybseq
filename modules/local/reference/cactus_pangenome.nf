@@ -24,7 +24,9 @@ process CACTUS_PANGENOME {
     path "gfa/${params.outname}.vcf", emit: vcf, optional: true    // --vcf
 
     script:
+    def toilWorkDir = "${params.outdir}/toil_work"
     """
+    mkdir -p ${toilWorkDir}
     mkdir -p gfa
     cactus-pangenome js ${assemblies} \\
         --outDir gfa \\
@@ -49,6 +51,8 @@ process CACTUS_PANGENOME {
     gunzip -c gfa/${params.outname}.gfa.gz > gfa/${params.outname}.gfa
     gunzip -c gfa/${params.outname}.vcf.gz > gfa/${params.outname}.vcf
     mv gfa/${params.outname}.dist gfa/${params.outname}.dist.bak
+
+    rm -rf ${toilWorkDir}
     """
 
     stub:
