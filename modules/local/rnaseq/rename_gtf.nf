@@ -11,17 +11,17 @@ process RENAME_GTF {
     path gtf
 
     output:
-    path "gfa/${params.ref_name}.gtf", emit: renamed_gtf
+    path "ref/${params.ref_name}.gtf", emit: renamed_gtf
 
     script:
     """
-    mkdir -p gfa
-    rename_gtf_for_vg.sh ${gtf} ${params.ref_name} gfa/${params.ref_name}.gtf
+    mkdir -p ref
+    rename_gtf_for_vg.sh ${gtf} ${params.ref_name} ref/${params.ref_name}.gtf
     """
 
     stub:
     """
-    mkdir -p gfa
-    cp ${gtf} gfa/${params.ref_name}.gtf
+    mkdir -p ref
+    cp ${gtf} ref/${params.ref_name}.gtf
     """
 }

@@ -10,17 +10,17 @@ process VG_INDEX_DIST_RNA {
     path xg
 
     output:
-    path "gfa/${params.outname}_spliced.dist", emit: dist
+    path "ref/${params.outname}_spliced.dist", emit: dist
 
     script:
     """
-    mkdir -p gfa
-    vg index -j gfa/${params.outname}_spliced.dist ${xg}
+    mkdir -p ref
+    vg index -j ref/${params.outname}_spliced.dist ${xg}
     """
 
     stub:
     """
-    mkdir -p gfa
-    touch gfa/${params.outname}_spliced.dist
+    mkdir -p ref
+    touch ref/${params.outname}_spliced.dist
     """
 }

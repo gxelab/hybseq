@@ -12,18 +12,18 @@ process BCFTOOLS_MERGE_DNA {
     tuple val(sample), path(vcf), path(csi), val(idx)    // collected list, sorted by idx
 
     output:
-    path "gam/combined.vcf.gz", emit: combined_vcf
+    path "dna/combined.vcf.gz", emit: combined_vcf
 
     script:
     def vcfs = vcf.join(' ')
     """
-    mkdir -p gam
-    bcftools merge ${vcfs} -O z -o gam/combined.vcf.gz
+    mkdir -p dna
+    bcftools merge ${vcfs} -O z -o dna/combined.vcf.gz
     """
 
     stub:
     """
-    mkdir -p gam
-    touch gam/combined.vcf.gz
+    mkdir -p dna
+    touch dna/combined.vcf.gz
     """
 }

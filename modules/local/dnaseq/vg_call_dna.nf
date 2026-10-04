@@ -12,18 +12,18 @@ process VG_CALL_DNA {
     path snarls
 
     output:
-    tuple val(sample), path("gam/${sample}.vcf.gz"), val(idx), emit: vcf
+    tuple val(sample), path("dna/${sample}.vcf.gz"), val(idx), emit: vcf
 
     script:
     """
-    mkdir -p gam
+    mkdir -p dna
     vg call ${gbz} -r ${snarls} -k ${pack} -s ${sample} -z -a -t ${task.cpus} \\
-        | bgzip -c > gam/${sample}.vcf.gz
+        | bgzip -c > dna/${sample}.vcf.gz
     """
 
     stub:
     """
-    mkdir -p gam
-    touch gam/${sample}.vcf.gz
+    mkdir -p dna
+    touch dna/${sample}.vcf.gz
     """
 }

@@ -81,19 +81,23 @@ pass "nextflow config"
 echo "== 3. DNA-seq workflow (stub-run) =="
 $NF run . -profile $PROFILE -stub-run --run dnaseq
 for f in \
-    "$RESULTS/gfa/test.gbz" "$RESULTS/gfa/test.dist" "$RESULTS/gfa/test.dist.bak" \
-    "$RESULTS/gfa/test.shortread.withzip.min" "$RESULTS/gfa/test.shortread.zipcodes" \
-    "$RESULTS/gfa/test.snarls" "$RESULTS/gfa/test.log" \
-    "$RESULTS/gam/combined.vcf.gz" "$RESULTS/gam/combined.vcf.tsv.gz"
+    "$RESULTS/ref/test.gbz" "$RESULTS/ref/test.dist" "$RESULTS/ref/test.dist.bak" \
+    "$RESULTS/ref/test.shortread.withzip.min" "$RESULTS/ref/test.shortread.zipcodes" \
+    "$RESULTS/ref/test.snarls" "$RESULTS/ref/test.log" \
+    "$RESULTS/dna/combined.vcf.gz" "$RESULTS/dna/combined.vcf.tsv.gz"
 do
     [ -f "$f" ] || fail "missing expected output: $f"
 done
 for s in dna_a dna_b dna_hybrid dna_c; do
     for ext in gam gam.log pack vcf.gz vcf.gz.csi; do
-        [ -f "$RESULTS/gam/$s.$ext" ] || fail "missing expected output: $RESULTS/gam/$s.$ext"
+        [ -f "$RESULTS/dna/$s.$ext" ] || fail "missing expected output: $RESULTS/dna/$s.$ext"
     done
 done
 [ -z "$(find "$RESULTS" -name '*.dist2' -print -quit)" ] || fail "dist2 must not be published (intermediate)"
+# Retired directory names must never reappear (guards a partial rename in any module).
+for d in gfa gam; do
+    [ ! -d "$RESULTS/$d" ] || fail "retired output dir results/$d was created"
+done
 [ ! -d "$RESULTS/rna" ] || fail "dnaseq workflow must not create results/rna"
 pass "dnaseq workflow outputs complete"
 clean
@@ -101,10 +105,10 @@ clean
 echo "== 4. RNA-seq workflow (stub-run) =="
 $NF run . -profile $PROFILE -stub-run --run rnaseq
 for f in \
-    "$RESULTS/gfa/ref_a.gtf" \
-    "$RESULTS/gfa/test_spliced.pg" "$RESULTS/gfa/test_spliced.xg" \
-    "$RESULTS/gfa/test_spliced.gcsa" "$RESULTS/gfa/test_spliced.gcsa.lcp" \
-    "$RESULTS/gfa/test_spliced.snarls" "$RESULTS/gfa/test_spliced.dist"
+    "$RESULTS/ref/ref_a.gtf" \
+    "$RESULTS/ref/test_spliced.pg" "$RESULTS/ref/test_spliced.xg" \
+    "$RESULTS/ref/test_spliced.gcsa" "$RESULTS/ref/test_spliced.gcsa.lcp" \
+    "$RESULTS/ref/test_spliced.snarls" "$RESULTS/ref/test_spliced.dist"
 do
     [ -f "$f" ] || fail "missing expected output: $f"
 done
@@ -114,14 +118,18 @@ for s in rna_a rna_b; do
     done
 done
 [ -z "$(find "$RESULTS" -name '*pruned.pg*' -print -quit)" ] || fail "pruned.pg must not be published (ephemeral intermediate)"
-[ ! -d "$RESULTS/gam" ] || fail "rnaseq workflow must not create results/gam"
+# Retired directory names must never reappear (guards a partial rename in any module).
+for d in gfa gam; do
+    [ ! -d "$RESULTS/$d" ] || fail "retired output dir results/$d was created"
+done
+[ ! -d "$RESULTS/dna" ] || fail "rnaseq workflow must not create results/dna"
 pass "rnaseq workflow outputs complete"
 clean
 
 echo "== 5. default entry: both assays, shared reference (stub-run) =="
 # .dot needs no graphviz (unlike .svg); written into the gitignored test/results/
 $NF run . -profile $PROFILE -stub-run -with-dag "$RESULTS/dag.dot"
-[ -f "$RESULTS/gam/combined.vcf.tsv.gz" ] || fail "missing DNA output in default entry"
+[ -f "$RESULTS/dna/combined.vcf.tsv.gz" ] || fail "missing DNA output in default entry"
 [ -f "$RESULTS/rna/rna_a.vcf.tsv.gz" ] || fail "missing RNA output in default entry"
 [ -s "$RESULTS/dag.dot" ] || fail "missing DAG file"
 grep -q 'CACTUS_PANGENOME' "$RESULTS/dag.dot" || fail "CACTUS_PANGENOME missing from DAG"

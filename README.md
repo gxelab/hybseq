@@ -119,8 +119,8 @@ Published under `--outdir` (`results/` by default):
 
 | dir | contents |
 |---|---|
-| `gfa/` | graph + index artifacts: `<outname>.gbz/.dist/.dist.bak/.shortread.withzip.min/.shortread.zipcodes/.snarls/.log/.gfa/.vcf`, `<ref_name>.gtf`, `<outname>_spliced.pg/.xg/.gcsa/.gcsa.lcp/.snarls/.dist` |
-| `gam/` | per DNA sample: `<sample>.gam`, `<sample>.gam.log`, `<sample>.pack`, `<sample>.vcf.gz`, `<sample>.vcf.gz.csi`; combined: `combined.vcf.gz`, `combined.vcf.tsv.gz` |
+| `ref/` | reference graph + index artifacts: `<outname>.gbz/.dist/.dist.bak/.shortread.withzip.min/.shortread.zipcodes/.snarls/.log/.gfa/.vcf`, the renamed `<ref_name>.gtf`, and the spliced-graph artifacts `<outname>_spliced.pg/.xg/.gcsa/.gcsa.lcp/.snarls/.dist` |
+| `dna/` | per DNA sample: `<sample>.gam`, `<sample>.gam.log`, `<sample>.pack`, `<sample>.vcf.gz`, `<sample>.vcf.gz.csi`; combined: `combined.vcf.gz`, `combined.vcf.tsv.gz` |
 | `rna/` | per RNA sample: `<sample>.gam`, `<sample>.pack`, `<sample>.vcf.gz`, `<sample>.vcf.tsv.gz` |
 
 `<outname>_spliced.pruned.pg` and `<outname>.dist2` are intermediates and are never published; `<outname>.dist.bak` is the archived cactus distance index and `<outname>.dist` is the rebuilt index used for mapping. The TSVs carry one row per VCF record (CHROM, POS, ID, REF, ALT, QUAL, FILTER, per-sample GT, DP, AD{0}, AD{1}, GQ) and are suited as inputs to downstream tabular analyses.

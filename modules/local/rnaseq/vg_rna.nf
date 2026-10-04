@@ -12,18 +12,18 @@ process VG_RNA {
     path gtf
 
     output:
-    path "gfa/${params.outname}_spliced.pg", emit: pg
+    path "ref/${params.outname}_spliced.pg", emit: pg
 
     script:
     """
-    mkdir -p gfa
+    mkdir -p ref
     vg rna -p --threads ${task.cpus} --transcripts ${gtf} --use-hap-ref --gbz-format ${gbz} \\
-        > gfa/${params.outname}_spliced.pg
+        > ref/${params.outname}_spliced.pg
     """
 
     stub:
     """
-    mkdir -p gfa
-    touch gfa/${params.outname}_spliced.pg
+    mkdir -p ref
+    touch ref/${params.outname}_spliced.pg
     """
 }

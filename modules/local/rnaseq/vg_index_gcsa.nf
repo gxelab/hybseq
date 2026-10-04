@@ -12,18 +12,18 @@ process VG_INDEX_GCSA {
     path pruned_pg
 
     output:
-    path "gfa/${params.outname}_spliced.gcsa",     emit: gcsa
-    path "gfa/${params.outname}_spliced.gcsa.lcp", emit: gcsa_lcp
+    path "ref/${params.outname}_spliced.gcsa",     emit: gcsa
+    path "ref/${params.outname}_spliced.gcsa.lcp", emit: gcsa_lcp
 
     script:
     """
-    mkdir -p gfa ${params.gcsa_tmpdir}
-    vg index -t ${task.cpus} -g gfa/${params.outname}_spliced.gcsa -b ${params.gcsa_tmpdir} ${pruned_pg}
+    mkdir -p ref ${params.gcsa_tmpdir}
+    vg index -t ${task.cpus} -g ref/${params.outname}_spliced.gcsa -b ${params.gcsa_tmpdir} ${pruned_pg}
     """
 
     stub:
     """
-    mkdir -p gfa
-    touch gfa/${params.outname}_spliced.gcsa gfa/${params.outname}_spliced.gcsa.lcp
+    mkdir -p ref
+    touch ref/${params.outname}_spliced.gcsa ref/${params.outname}_spliced.gcsa.lcp
     """
 }

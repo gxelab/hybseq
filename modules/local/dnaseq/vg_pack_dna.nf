@@ -11,17 +11,17 @@ process VG_PACK_DNA {
     path gbz
 
     output:
-    tuple val(sample), path("gam/${sample}.pack"), val(idx), emit: pack
+    tuple val(sample), path("dna/${sample}.pack"), val(idx), emit: pack
 
     script:
     """
-    mkdir -p gam
-    vg pack -x ${gbz} -g ${gam} -o gam/${sample}.pack -t ${task.cpus} -Q ${params.min_mapq}
+    mkdir -p dna
+    vg pack -x ${gbz} -g ${gam} -o dna/${sample}.pack -t ${task.cpus} -Q ${params.min_mapq}
     """
 
     stub:
     """
-    mkdir -p gam
-    touch gam/${sample}.pack
+    mkdir -p dna
+    touch dna/${sample}.pack
     """
 }

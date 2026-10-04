@@ -2,13 +2,13 @@
 //
 // The input vcf is re-emitted only to carry it into the merge; the publish pattern
 // `*.csi` means only the index is published here (the VCF itself is already
-// published by VG_CALL_DNA under gam/).
+// published by VG_CALL_DNA under dna/).
 process BCFTOOLS_INDEX {
     tag "$sample"
 
     container params.bcftools_container
 
-    publishDir [path: "${params.outdir}/gam", pattern: '*.csi', mode: params.publish_dir_mode]
+    publishDir [path: "${params.outdir}/dna", pattern: '*.csi', mode: params.publish_dir_mode]
 
     input:
     tuple val(sample), path(vcf), val(idx)

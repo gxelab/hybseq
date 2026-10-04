@@ -11,18 +11,18 @@ process BCFTOOLS_QUERY_DNA {
     path combined_vcf
 
     output:
-    path "gam/combined.vcf.tsv.gz", emit: tsv
+    path "dna/combined.vcf.tsv.gz", emit: tsv
 
     script:
     """
-    mkdir -p gam
+    mkdir -p dna
     bcftools query -f '%CHROM\\t%POS\\t%ID\\t%REF\\t%ALT\\t%QUAL\\t%FILTER[\\t%GT\\t%DP\\t%AD{0}\\t%AD{1}\\t%GQ]\\n' \\
-        ${combined_vcf} | gzip -c > gam/combined.vcf.tsv.gz
+        ${combined_vcf} | gzip -c > dna/combined.vcf.tsv.gz
     """
 
     stub:
     """
-    mkdir -p gam
-    touch gam/combined.vcf.tsv.gz
+    mkdir -p dna
+    touch dna/combined.vcf.tsv.gz
     """
 }

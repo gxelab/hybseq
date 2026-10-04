@@ -10,17 +10,17 @@ process VG_INDEX_XG {
     path pg
 
     output:
-    path "gfa/${params.outname}_spliced.xg", emit: xg
+    path "ref/${params.outname}_spliced.xg", emit: xg
 
     script:
     """
-    mkdir -p gfa
-    vg index -x gfa/${params.outname}_spliced.xg ${pg}
+    mkdir -p ref
+    vg index -x ref/${params.outname}_spliced.xg ${pg}
     """
 
     stub:
     """
-    mkdir -p gfa
-    touch gfa/${params.outname}_spliced.xg
+    mkdir -p ref
+    touch ref/${params.outname}_spliced.xg
     """
 }

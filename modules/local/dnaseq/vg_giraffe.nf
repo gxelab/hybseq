@@ -20,12 +20,12 @@ process VG_GIRAFFE {
     path dist
 
     output:
-    tuple val(sample), path("gam/${sample}.gam"), path("gam/${sample}.gam.log"), val(idx), emit: gam
+    tuple val(sample), path("dna/${sample}.gam"), path("dna/${sample}.gam.log"), val(idx), emit: gam
 
     script:
     def fq_args = fq2 ? "-f ${fq1} -f ${fq2}" : "-f ${fq1}"
     """
-    mkdir -p gam
+    mkdir -p dna
     vg giraffe \\
         -Z ${gbz} \\
         -m ${min} \\
@@ -33,12 +33,12 @@ process VG_GIRAFFE {
         -d ${dist} \\
         ${fq_args} \\
         -t ${task.cpus} \\
-        > gam/${sample}.gam 2> gam/${sample}.gam.log
+        > dna/${sample}.gam 2> dna/${sample}.gam.log
     """
 
     stub:
     """
-    mkdir -p gam
-    touch gam/${sample}.gam gam/${sample}.gam.log
+    mkdir -p dna
+    touch dna/${sample}.gam dna/${sample}.gam.log
     """
 }

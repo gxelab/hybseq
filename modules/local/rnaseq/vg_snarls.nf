@@ -11,17 +11,17 @@ process VG_SNARLS {
     path pg
 
     output:
-    path "gfa/${params.outname}_spliced.snarls", emit: snarls
+    path "ref/${params.outname}_spliced.snarls", emit: snarls
 
     script:
     """
-    mkdir -p gfa
-    vg snarls ${pg} > gfa/${params.outname}_spliced.snarls
+    mkdir -p ref
+    vg snarls ${pg} > ref/${params.outname}_spliced.snarls
     """
 
     stub:
     """
-    mkdir -p gfa
-    touch gfa/${params.outname}_spliced.snarls
+    mkdir -p ref
+    touch ref/${params.outname}_spliced.snarls
     """
 }

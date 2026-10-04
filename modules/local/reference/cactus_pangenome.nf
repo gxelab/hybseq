@@ -1,6 +1,6 @@
 // Build the pangenome graph with Minigraph-Cactus (cactus 3.1.4).
 // Runs as a managed foreground task; --logFile is written inside --outDir so the
-// published layout under results/gfa/ is uniform.
+// published layout under results/ref/ is uniform.
 // The cactus-produced distance index is archived as <outname>.dist.bak; the
 // primary <outname>.dist is replaced by the index VG_INDEX_DIST2 rebuilds.
 process CACTUS_PANGENOME {
@@ -14,22 +14,22 @@ process CACTUS_PANGENOME {
     path assemblies
 
     output:
-    path "gfa/${params.outname}.gbz",                   emit: gbz
-    path "gfa/${params.outname}.dist.bak",              emit: dist_bak
-    path "gfa/${params.outname}.shortread.withzip.min", emit: min
-    path "gfa/${params.outname}.shortread.zipcodes",    emit: zipcodes
-    path "gfa/${params.outname}.snarls",                emit: snarls
-    path "gfa/${params.outname}.log",                   emit: log
-    path "gfa/${params.outname}.gfa", emit: gfa, optional: true    // --gfa clip filter full
-    path "gfa/${params.outname}.vcf", emit: vcf, optional: true    // --vcf
+    path "ref/${params.outname}.gbz",                   emit: gbz
+    path "ref/${params.outname}.dist.bak",              emit: dist_bak
+    path "ref/${params.outname}.shortread.withzip.min", emit: min
+    path "ref/${params.outname}.shortread.zipcodes",    emit: zipcodes
+    path "ref/${params.outname}.snarls",                emit: snarls
+    path "ref/${params.outname}.log",                   emit: log
+    path "ref/${params.outname}.gfa", emit: gfa, optional: true    // --gfa clip filter full
+    path "ref/${params.outname}.vcf", emit: vcf, optional: true    // --vcf
 
     script:
     def toilWorkDir = "${params.outdir}/toil_work"
     """
     mkdir -p ${toilWorkDir}
-    mkdir -p gfa
+    mkdir -p ref
     cactus-pangenome js ${assemblies} \\
-        --outDir gfa \\
+        --outDir ref \\
         --outName ${params.outname} \\
         --reference ${params.ref_name} \\
         --giraffe clip filter \\
@@ -46,25 +46,25 @@ process CACTUS_PANGENOME {
         --mgCores ${params.cactus_mg_cores} \\
         --mapCores ${params.cactus_map_cores} \\
         --batchSystem single_machine \\
-        --logFile gfa/${params.outname}.log
+        --logFile ref/${params.outname}.log
 
-    gunzip -c gfa/${params.outname}.gfa.gz > gfa/${params.outname}.gfa
-    gunzip -c gfa/${params.outname}.vcf.gz > gfa/${params.outname}.vcf
-    mv gfa/${params.outname}.dist gfa/${params.outname}.dist.bak
+    gunzip -c ref/${params.outname}.gfa.gz > ref/${params.outname}.gfa
+    gunzip -c ref/${params.outname}.vcf.gz > ref/${params.outname}.vcf
+    mv ref/${params.outname}.dist ref/${params.outname}.dist.bak
 
     rm -rf ${toilWorkDir}
     """
 
     stub:
     """
-    mkdir -p gfa
-    touch gfa/${params.outname}.gbz \\
-          gfa/${params.outname}.dist.bak \\
-          gfa/${params.outname}.shortread.withzip.min \\
-          gfa/${params.outname}.shortread.zipcodes \\
-          gfa/${params.outname}.snarls \\
-          gfa/${params.outname}.log \\
-          gfa/${params.outname}.gfa \\
-          gfa/${params.outname}.vcf
+    mkdir -p ref
+    touch ref/${params.outname}.gbz \\
+          ref/${params.outname}.dist.bak \\
+          ref/${params.outname}.shortread.withzip.min \\
+          ref/${params.outname}.shortread.zipcodes \\
+          ref/${params.outname}.snarls \\
+          ref/${params.outname}.log \\
+          ref/${params.outname}.gfa \\
+          ref/${params.outname}.vcf
     """
 }
