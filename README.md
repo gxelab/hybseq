@@ -95,7 +95,7 @@ Container images (versions the pipeline is developed and tested against):
   Bind-mount your data directories the same way you would with `apptainer exec`, e.g. `-c 'apptainer.runOptions = "--bind /my/data"'`.
 - `test` — tiny synthetic inputs for the smoke test (see [development.md](development.md#smoke-test))
 
-Resource note: cactus RAM/time are config defaults (64 GB / 48 h) and should be adjusted to your assemblies. The cactus Toil jobstore (`js/`) stays in the Nextflow work directory and is never published.
+Resource note: cactus RAM/time are config defaults (64 GB / 48 h) and should be adjusted to your assemblies. All cactus Toil scratch stays under `--outdir` (`toil_work/`, with the jobstore at `toil_work/js`) and is removed when the cactus task finishes; nothing in `toil_work/` is published.
 
 ## Usage
 

@@ -1,6 +1,9 @@
 // Build the pangenome graph with Minigraph-Cactus (cactus 3.1.4).
 // Runs as a managed foreground task; --logFile is written inside --outDir so the
 // published layout under results/ref/ is uniform.
+// The Toil jobstore is the first positional argument: it is kept with the rest of
+// the Toil scratch under ${params.outdir}/toil_work, which the task removes on
+// success (nothing in toil_work is published).
 // The cactus-produced distance index is archived as <outname>.dist.bak; the
 // primary <outname>.dist is replaced by the index VG_INDEX_DIST2 rebuilds.
 process CACTUS_PANGENOME {
@@ -28,7 +31,7 @@ process CACTUS_PANGENOME {
     """
     mkdir -p ${toilWorkDir}
     mkdir -p ref
-    cactus-pangenome js ${assemblies} \\
+    cactus-pangenome ${toilWorkDir}/js ${assemblies} \\
         --outDir ref \\
         --outName ${params.outname} \\
         --reference ${params.ref_name} \\

@@ -44,7 +44,8 @@ Each workflow filters `samples` by assay and errors out with `No dnaseq/rnaseq s
 `CACTUS_PANGENOME` runs `cactus-pangenome` as a managed foreground task:
 
 ```bash
-cactus-pangenome js <assemblies> \
+mkdir -p <outdir>/toil_work
+cactus-pangenome <outdir>/toil_work/js <assemblies> \
     --outDir ref --outName <outname> --reference <ref_name> \
     --giraffe clip filter --gbz clip filter full --gfa clip filter full --vcf \
     --permissiveContigFilter --haplo --chrom-vg clip filter --chrom-og full --viz \
@@ -53,9 +54,10 @@ cactus-pangenome js <assemblies> \
 gunzip -c ref/<outname>.gfa.gz > ref/<outname>.gfa
 gunzip -c ref/<outname>.vcf.gz > ref/<outname>.vcf
 mv ref/<outname>.dist ref/<outname>.dist.bak
+rm -rf <outdir>/toil_work
 ```
 
-The Toil jobstore (`js/`) stays in the Nextflow work directory and is never published. The distance index cactus produced is archived as `<outname>.dist.bak` inside the task, so `CACTUS_PANGENOME` publishes no file named `<outname>.dist` (which avoids racing the promoted index, see below).
+The Toil jobstore is the first positional argument and lives at `<outdir>/toil_work/js`, so all Toil scratch stays under `--outdir`; the task removes `toil_work/` when it finishes. Nothing in `toil_work/` is published. The distance index cactus produced is archived as `<outname>.dist.bak` inside the task, so `CACTUS_PANGENOME` publishes no file named `<outname>.dist` (which avoids racing the promoted index, see below).
 
 `VG_INDEX_DIST2` then rebuilds the distance index and promotes it to the primary filename: `vg index -j ref/<outname>.dist2 ref/<outname>.gbz`, then `mv ref/<outname>.dist2 ref/<outname>.dist`. The cactus index was already renamed to `<outname>.dist.bak`, so the published `<outname>.dist` is the rebuilt index and every `dist` consumer (`vg giraffe -d`) uses it — exactly the notebook sequence (S05 L26–28). `<outname>.dist2` is an intermediate and is never published.
 
@@ -188,6 +190,7 @@ Notes:
 - `bcftools_container` uses a placeholder tag (`1.19--h3ea31c5_0`). Pin it to a tag available on your cluster; no particular version is required.
 - Cactus resources are estimates (64 GB RAM / 48 h per process) and must be tuned to the assemblies; all other processes default to 1 CPU, 8 GB, 8 h, with per-process overrides in `nextflow.config`.
 - `publish_dir_mode` defaults to `copy`, which will copy large GAM/pack files. `symlink` is recommended for real runs.
+- `CACTUS_PANGENOME` deletes `<outdir>/toil_work` only when it succeeds. A failed or interrupted cactus run leaves the Toil jobstore behind, and rerunning into the same `--outdir` will hand Toil an existing jobstore; remove `<outdir>/toil_work` manually before such a rerun.
 - `RENAME_GTF` runs on the host with `sed`, so `bin/` must be reachable on `PATH`. It assumes a tab-delimited GTF: lines without a tab are passed through unprefixed rather than guessed at.
 - RNA-seq has no merge step by design, so cross-sample RNA comparison must be done downstream of the per-sample TSVs.
 - No biological validation is automated in this repository: the smoke test is stub-only, and real-data correctness is established by the notebook comparisons (e.g. S05's grenedalf cross-check), not by CI.
