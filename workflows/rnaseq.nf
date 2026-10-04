@@ -1,16 +1,19 @@
 // RNA-seq workflow: renamed GTF -> spliced graph + indexes, then per sample
-// mpmap -> pack -> call -> per-sample bcftools query.
-include { RENAME_GTF }          from '../modules/local/rnaseq/rename_gtf'
-include { VG_RNA }              from '../modules/local/rnaseq/vg_rna'
-include { VG_INDEX_XG }         from '../modules/local/rnaseq/vg_index_xg'
-include { VG_PRUNE }            from '../modules/local/rnaseq/vg_prune'
-include { VG_INDEX_GCSA }       from '../modules/local/rnaseq/vg_index_gcsa'
-include { VG_SNARLS }           from '../modules/local/rnaseq/vg_snarls'
-include { VG_INDEX_DIST_RNA }   from '../modules/local/rnaseq/vg_index_dist_rna'
-include { VG_MPMAP }            from '../modules/local/rnaseq/vg_mpmap'
-include { VG_PACK_RNA }         from '../modules/local/rnaseq/vg_pack_rna'
-include { VG_CALL_RNA }         from '../modules/local/rnaseq/vg_call_rna'
-include { BCFTOOLS_QUERY_RNA }  from '../modules/local/rnaseq/bcftools_query_rna'
+// mpmap -> pack -> call, then bcftools index -> merge -> query. Everything from
+// pack onwards is shared with the DNA-seq workflow (modules/local/variation/).
+include { RENAME_GTF }        from '../modules/local/reference/rename_gtf'
+include { VG_RNA }            from '../modules/local/reference/vg_rna'
+include { VG_INDEX_XG }       from '../modules/local/reference/vg_index_xg'
+include { VG_PRUNE }          from '../modules/local/reference/vg_prune'
+include { VG_INDEX_GCSA }     from '../modules/local/reference/vg_index_gcsa'
+include { VG_SNARLS }         from '../modules/local/reference/vg_snarls'
+include { VG_INDEX_DIST_RNA } from '../modules/local/reference/vg_index_dist_rna'
+include { VG_MPMAP }          from '../modules/local/rnaseq/vg_mpmap'
+include { VG_PACK }           from '../modules/local/variation/vg_pack'
+include { VG_CALL }           from '../modules/local/variation/vg_call'
+include { BCFTOOLS_INDEX }    from '../modules/local/variation/bcftools_index'
+include { BCFTOOLS_MERGE }    from '../modules/local/variation/bcftools_merge'
+include { BCFTOOLS_QUERY }    from '../modules/local/variation/bcftools_query'
 
 workflow RNASEQ {
     take:
@@ -33,10 +36,21 @@ workflow RNASEQ {
     ch_dist    = VG_INDEX_DIST_RNA(ch_xg.xg)
 
     ch_gam  = VG_MPMAP(ch_rna, ch_xg.xg, ch_gcsa.gcsa, ch_gcsa.gcsa_lcp, ch_dist.dist)
-    ch_pack = VG_PACK_RNA(ch_gam, ch_xg.xg)
-    ch_vcf  = VG_CALL_RNA(ch_pack, ch_xg.xg, ch_snarls.snarls)
-    ch_tsv  = BCFTOOLS_QUERY_RNA(ch_vcf)
+    ch_pack = VG_PACK(ch_gam.gam, ch_xg.xg, 'rna')
+    // The spliced xg is not a GBZ, so vg call gets no -z (that flag only applies to
+    // GBZ input); --rna_call_sample overrides vg call -s, otherwise the sample id.
+    ch_vcf  = VG_CALL(ch_pack, ch_xg.xg, ch_snarls.snarls, 'rna', false, params.rna_call_sample ?: '')
+    ch_csi  = BCFTOOLS_INDEX(ch_vcf, 'rna')
+
+    // Same samplesheet-order merge as the DNA-seq workflow: the carried row index
+    // makes the order deterministic regardless of task completion order, and the
+    // sorted list is reshaped into the single tuple of lists BCFTOOLS_MERGE declares.
+    ch_merge_in = ch_csi.toSortedList { a, b -> a[3] <=> b[3] }.map { items -> [items.collect { it[0] }, items.collect { it[1] }, items.collect { it[2] }, items.collect { it[3] }] }
+    ch_merged   = BCFTOOLS_MERGE(ch_merge_in, 'rna')
+
+    ch_tsv = BCFTOOLS_QUERY(ch_merged.combined_vcf, 'rna')
 
     emit:
-    tsv = ch_tsv.tsv
+    combined_vcf = ch_merged.combined_vcf
+    tsv          = ch_tsv.tsv
 }

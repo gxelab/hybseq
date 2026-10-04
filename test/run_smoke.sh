@@ -108,14 +108,17 @@ for f in \
     "$RESULTS/ref/ref_a.gtf" \
     "$RESULTS/ref/test_spliced.pg" "$RESULTS/ref/test_spliced.xg" \
     "$RESULTS/ref/test_spliced.gcsa" "$RESULTS/ref/test_spliced.gcsa.lcp" \
-    "$RESULTS/ref/test_spliced.snarls" "$RESULTS/ref/test_spliced.dist"
+    "$RESULTS/ref/test_spliced.snarls" "$RESULTS/ref/test_spliced.dist" \
+    "$RESULTS/rna/combined.vcf.gz" "$RESULTS/rna/combined.vcf.tsv.gz"
 do
     [ -f "$f" ] || fail "missing expected output: $f"
 done
 for s in rna_a rna_b; do
-    for ext in gam pack vcf.gz vcf.tsv.gz; do
+    for ext in gam pack vcf.gz vcf.gz.csi; do
         [ -f "$RESULTS/rna/$s.$ext" ] || fail "missing expected output: $RESULTS/rna/$s.$ext"
     done
+    # RNA VCFs are indexed and merged like the DNA ones; per-sample TSVs are retired.
+    [ ! -f "$RESULTS/rna/$s.vcf.tsv.gz" ] || fail "per-sample RNA TSV must not be published: $RESULTS/rna/$s.vcf.tsv.gz"
 done
 [ -z "$(find "$RESULTS" -name '*pruned.pg*' -print -quit)" ] || fail "pruned.pg must not be published (ephemeral intermediate)"
 # Retired directory names must never reappear (guards a partial rename in any module).
@@ -130,7 +133,7 @@ echo "== 5. default entry: both assays, shared reference (stub-run) =="
 # .dot needs no graphviz (unlike .svg); written into the gitignored test/results/
 $NF run . -profile $PROFILE -stub-run -with-dag "$RESULTS/dag.dot"
 [ -f "$RESULTS/dna/combined.vcf.tsv.gz" ] || fail "missing DNA output in default entry"
-[ -f "$RESULTS/rna/rna_a.vcf.tsv.gz" ] || fail "missing RNA output in default entry"
+[ -f "$RESULTS/rna/combined.vcf.tsv.gz" ] || fail "missing RNA output in default entry"
 [ -s "$RESULTS/dag.dot" ] || fail "missing DAG file"
 grep -q 'CACTUS_PANGENOME' "$RESULTS/dag.dot" || fail "CACTUS_PANGENOME missing from DAG"
 pass "default entry outputs complete (reference workflow invoked once for both assays)"

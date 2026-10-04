@@ -1,7 +1,7 @@
-// Tabulate the merged VCF with bcftools query (one row per record,
+// Tabulate the merged VCF of one assay with bcftools query (one row per record,
 // CHROM POS ID REF ALT QUAL FILTER + per-sample GT DP AD{0} AD{1} GQ).
-process BCFTOOLS_QUERY_DNA {
-    tag 'combined'
+process BCFTOOLS_QUERY {
+    tag "${assay_dir}/combined"
 
     container params.bcftools_container
 
@@ -9,20 +9,21 @@ process BCFTOOLS_QUERY_DNA {
 
     input:
     path combined_vcf
+    val assay_dir       // 'dna' | 'rna'
 
     output:
-    path "dna/combined.vcf.tsv.gz", emit: tsv
+    path "${assay_dir}/combined.vcf.tsv.gz", emit: tsv
 
     script:
     """
-    mkdir -p dna
+    mkdir -p ${assay_dir}
     bcftools query -f '%CHROM\\t%POS\\t%ID\\t%REF\\t%ALT\\t%QUAL\\t%FILTER[\\t%GT\\t%DP\\t%AD{0}\\t%AD{1}\\t%GQ]\\n' \\
-        ${combined_vcf} | gzip -c > dna/combined.vcf.tsv.gz
+        ${combined_vcf} | gzip -c > ${assay_dir}/combined.vcf.tsv.gz
     """
 
     stub:
     """
-    mkdir -p dna
-    touch dna/combined.vcf.tsv.gz
+    mkdir -p ${assay_dir}
+    touch ${assay_dir}/combined.vcf.tsv.gz
     """
 }

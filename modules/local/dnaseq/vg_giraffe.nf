@@ -3,7 +3,7 @@
 // the layout is inferred from the samplesheet. fq2 is declared `val` so empty
 // strings are accepted (it is still validated via file(..., checkIfExists: true)
 // when the samplesheet is parsed).
-// The -d index is the rebuilt <outname>.dist that VG_INDEX_DIST2 promotes from
+// The -d index is the rebuilt <outname>.dist that VG_INDEX_DIST_UPDATE promotes from
 // <outname>.dist2; the cactus-produced index is archived as <outname>.dist.bak.
 process VG_GIRAFFE {
     tag "$sample"
@@ -20,7 +20,10 @@ process VG_GIRAFFE {
     path dist
 
     output:
-    tuple val(sample), path("dna/${sample}.gam"), path("dna/${sample}.gam.log"), val(idx), emit: gam
+    tuple val(sample), path("dna/${sample}.gam"), val(idx), emit: gam
+    // Side artifact: published, but not carried into VG_PACK (the pack -> call ->
+    // index -> merge -> query chain is shared with RNA-seq, which has no such log).
+    path("dna/${sample}.gam.log"), emit: gam_log
 
     script:
     def fq_args = fq2 ? "-f ${fq1} -f ${fq2}" : "-f ${fq1}"

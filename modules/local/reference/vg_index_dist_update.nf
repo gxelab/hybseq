@@ -5,7 +5,7 @@
 //   mv ref/<outname>.dist ref/<outname>.dist.bak
 //   mv ref/<outname>.dist2 ref/<outname>.dist
 // <outname>.dist2 is an intermediate and is never published.
-process VG_INDEX_DIST2 {
+process VG_INDEX_DIST_UPDATE {
     tag "$params.outname"
 
     container params.vg_container

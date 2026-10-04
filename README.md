@@ -21,8 +21,8 @@ The pipeline builds one pangenome graph from a reference and one or more additio
 2. Build the spliced pangenome graph with **vg rna** (PackedGraph, `--use-hap-ref --gbz-format`)
 3. Index: `vg index -x` (xg) → `vg prune` → `vg index -g` (GCSA) → `vg snarls` → `vg index -j` (dist)
 4. Map reads with **vg mpmap** (`-n RNA -l short`; single-end or paired-end)
-5. Read support (**vg pack**, `-Q 5`) and variant calling (**vg call**, `-z -a`) on the spliced graph
-6. Per-sample tabulation with **bcftools query** (no merge is performed for RNA-seq)
+5. Read support (**vg pack**, `-Q 5`) and variant calling (**vg call**, `-a`; no `-z`, which applies only to a GBZ graph) on the spliced graph
+6. Index, merge and tabulate all samples with **bcftools** (`index -f` → `merge` → `query`)
 
 ## DNA-seq vs RNA-seq
 
@@ -31,7 +31,7 @@ The pipeline builds one pangenome graph from a reference and one or more additio
 | Graph mapped against | GBZ (`<outname>.gbz`) | Spliced PackedGraph built by `vg rna` from the same GBZ |
 | Mapper | `vg giraffe -Z gbz -m min -z zipcodes -d dist`, one `-f` per read file | `vg mpmap -x xg -g gcsa -d dist -n RNA -l short`, one `-f` per read file |
 | Read support / variant call inputs | `-x <outname>.gbz`, cactus snarls | `-x <outname>_spliced.xg`, `<outname>_spliced.snarls` |
-| VCF aggregation | `bcftools index` + **`bcftools merge`** of all samples, then one `query` | **per-sample** `bcftools query`, no merge |
+| VCF aggregation | `bcftools index` + **`bcftools merge`** of all samples, then one `query` | same shared steps as DNA-seq, one `combined.vcf.gz`/`.tsv.gz` per assay |
 | Reads per sample | single-end or paired-end (inferred from the samplesheet) | single-end or paired-end (inferred from the samplesheet) |
 
 ## Inputs
@@ -77,7 +77,7 @@ All settings live in [`nextflow.config`](nextflow.config):
 | `cactus_cons/index/mg_cores`, `cactus_map_cores` | 16 / 16 / 16 / 4 | `--consCores/--indexCores/--mgCores/--mapCores` |
 | `min_mapq` | 5 | `vg pack -Q` (ignore reads below this MAPQ) |
 | `gcsa_tmpdir` | `tmp` | `vg index -b` temporary directory |
-| `rna_call_sample` | `null` | `vg call -s` for RNA; null → sample id, or a fixed name |
+| `rna_call_sample` | `null` | `vg call -s` for RNA; null → sample id, or a fixed name (a fixed name is only valid for a single RNA sample: it makes the sample column identical in every RNA VCF, which `bcftools merge` rejects) |
 | `run` | `both` | `both` \| `dnaseq` \| `rnaseq` |
 | `outdir` / `publish_dir_mode` | `results` / `copy` | outputs; `symlink` recommended for large GAMs |
 
@@ -121,7 +121,7 @@ Published under `--outdir` (`results/` by default):
 |---|---|
 | `ref/` | reference graph + index artifacts: `<outname>.gbz/.dist/.dist.bak/.shortread.withzip.min/.shortread.zipcodes/.snarls/.log/.gfa/.vcf`, the renamed `<ref_name>.gtf`, and the spliced-graph artifacts `<outname>_spliced.pg/.xg/.gcsa/.gcsa.lcp/.snarls/.dist` |
 | `dna/` | per DNA sample: `<sample>.gam`, `<sample>.gam.log`, `<sample>.pack`, `<sample>.vcf.gz`, `<sample>.vcf.gz.csi`; combined: `combined.vcf.gz`, `combined.vcf.tsv.gz` |
-| `rna/` | per RNA sample: `<sample>.gam`, `<sample>.pack`, `<sample>.vcf.gz`, `<sample>.vcf.tsv.gz` |
+| `rna/` | per RNA sample: `<sample>.gam`, `<sample>.pack`, `<sample>.vcf.gz`, `<sample>.vcf.gz.csi`; combined: `combined.vcf.gz`, `combined.vcf.tsv.gz` |
 
 `<outname>_spliced.pruned.pg` and `<outname>.dist2` are intermediates and are never published; `<outname>.dist.bak` is the archived cactus distance index and `<outname>.dist` is the rebuilt index used for mapping. The TSVs carry one row per VCF record (CHROM, POS, ID, REF, ALT, QUAL, FILTER, per-sample GT, DP, AD{0}, AD{1}, GQ) and are suited as inputs to downstream tabular analyses.
 

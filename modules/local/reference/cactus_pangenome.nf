@@ -5,7 +5,7 @@
 // the Toil scratch under ${params.outdir}/toil_work, which the task removes on
 // success (nothing in toil_work is published).
 // The cactus-produced distance index is archived as <outname>.dist.bak; the
-// primary <outname>.dist is replaced by the index VG_INDEX_DIST2 rebuilds.
+// primary <outname>.dist is replaced by the index VG_INDEX_DIST_UPDATE rebuilds.
 process CACTUS_PANGENOME {
     tag "$params.outname"
 

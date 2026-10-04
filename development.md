@@ -10,9 +10,10 @@ Workflow internals, provenance, design decisions, known limitations, and the smo
 | `workflows/reference.nf` | Graph construction and indexing, shared by both assays |
 | `workflows/dnaseq.nf` | DNA-seq / pool-seq workflow |
 | `workflows/rnaseq.nf` | RNA-seq workflow |
-| `modules/local/reference/` | `CACTUS_PANGENOME`, `VG_INDEX_DIST2` |
-| `modules/local/dnaseq/` | `VG_GIRAFFE`, `VG_PACK_DNA`, `VG_CALL_DNA`, `BCFTOOLS_INDEX`, `BCFTOOLS_MERGE_DNA`, `BCFTOOLS_QUERY_DNA` |
-| `modules/local/rnaseq/` | `RENAME_GTF`, `VG_RNA`, `VG_INDEX_XG`, `VG_PRUNE`, `VG_INDEX_GCSA`, `VG_SNARLS`, `VG_INDEX_DIST_RNA`, `VG_MPMAP`, `VG_PACK_RNA`, `VG_CALL_RNA`, `BCFTOOLS_QUERY_RNA` |
+| `modules/local/reference/` | Reference-graph steps, whichever workflow invokes them: `CACTUS_PANGENOME`, `VG_INDEX_DIST_UPDATE`, `RENAME_GTF`, `VG_RNA`, `VG_INDEX_XG`, `VG_PRUNE`, `VG_INDEX_GCSA`, `VG_SNARLS`, `VG_INDEX_DIST_RNA` |
+| `modules/local/variation/` | `VG_PACK`, `VG_CALL`, `BCFTOOLS_INDEX`, `BCFTOOLS_MERGE`, `BCFTOOLS_QUERY` — shared by both assays (everything from `vg pack` onwards) |
+| `modules/local/dnaseq/` | `VG_GIRAFFE` (per-sample DNA mapping) |
+| `modules/local/rnaseq/` | `VG_MPMAP` (per-sample RNA mapping) |
 | `bin/rename_gtf_for_vg.sh` | Prefixes every non-comment GTF contig with `<sample>#0#`, whatever the contig naming scheme |
 | `assets/` | Placeholder samplesheet and cactus seqfile |
 | `test/` | Synthetic stub-run inputs and `run_smoke.sh` |
@@ -24,7 +25,7 @@ Workflow internals, provenance, design decisions, known limitations, and the smo
 main.nf
   ├── makeSamplesChannel()            // parse + validate samplesheet
   ├── REFERENCE(assemblies)           // once per run
-  │     └── CACTUS_PANGENOME → VG_INDEX_DIST2
+  │     └── CACTUS_PANGENOME → VG_INDEX_DIST_UPDATE
   ├── DNASEQ(...)   if params.run in ['both','dnaseq']
   └── RNASEQ(...)   if params.run in ['both','rnaseq']   // requires params.gtf
 ```
@@ -35,7 +36,7 @@ main.nf
 |---|---|---|
 | `REFERENCE` | `assemblies` (seqfile path) | `gbz`, `dist`, `min`, `zipcodes`, `snarls` |
 | `DNASEQ` | `gbz`, `dist`, `min`, `zipcodes`, `snarls`, `samples` (`[sample,assay,fq1,fq2,idx]`) | `combined_vcf`, `tsv` |
-| `RNASEQ` | `gbz`, `gtf`, `samples` | `tsv` |
+| `RNASEQ` | `gbz`, `gtf`, `samples` | `combined_vcf`, `tsv` |
 
 Each workflow filters `samples` by assay and errors out with `No dnaseq/rnaseq samples found in the samplesheet` when the filtered channel is empty. `params.run` is validated in `main.nf` (`both|dnaseq|rnaseq`), and `--run rnaseq|both` without `--gtf` errors before any task starts.
 
@@ -59,7 +60,39 @@ rm -rf <outdir>/toil_work
 
 The Toil jobstore is the first positional argument and lives at `<outdir>/toil_work/js`, so all Toil scratch stays under `--outdir`; the task removes `toil_work/` when it finishes. Nothing in `toil_work/` is published. The distance index cactus produced is archived as `<outname>.dist.bak` inside the task, so `CACTUS_PANGENOME` publishes no file named `<outname>.dist` (which avoids racing the promoted index, see below).
 
-`VG_INDEX_DIST2` then rebuilds the distance index and promotes it to the primary filename: `vg index -j ref/<outname>.dist2 ref/<outname>.gbz`, then `mv ref/<outname>.dist2 ref/<outname>.dist`. The cactus index was already renamed to `<outname>.dist.bak`, so the published `<outname>.dist` is the rebuilt index and every `dist` consumer (`vg giraffe -d`) uses it — exactly the notebook sequence (S05 L26–28). `<outname>.dist2` is an intermediate and is never published.
+`VG_INDEX_DIST_UPDATE` then rebuilds the distance index and promotes it to the primary filename: `vg index -j ref/<outname>.dist2 ref/<outname>.gbz`, then `mv ref/<outname>.dist2 ref/<outname>.dist`. The cactus index was already renamed to `<outname>.dist.bak`, so the published `<outname>.dist` is the rebuilt index and every `dist` consumer (`vg giraffe -d`) uses it — exactly the notebook sequence (S05 L26–28). `<outname>.dist2` is an intermediate and is never published.
+
+## Shared variant-calling steps (pack → call → index → merge → query)
+
+Everything from `vg pack` onwards is common to both assays and exists once, under `modules/local/variation/`. Each module takes `val assay_dir` (`dna`|`rna`), which selects the published subdirectory; `VG_CALL` additionally takes `graph_is_gbz` and `call_sample_name` (see the RNA-seq section).
+
+Per sample (`<assay_dir>` is `dna` for DNA-seq and `rna` for RNA-seq; the graph is the GBZ for DNA-seq and the spliced `xg` for RNA-seq):
+
+```bash
+vg pack -x <graph> -g <assay_dir>/<sample>.gam -o <assay_dir>/<sample>.pack -t <cpus> -Q 5
+
+# DNA-seq: -z restricts calling to the GBZ haplotypes
+vg call <outname>.gbz -r <outname>.snarls -k <assay_dir>/<sample>.pack \
+    -s <sample> -z -a -t <cpus> | bgzip -c > <assay_dir>/<sample>.vcf.gz
+
+# RNA-seq: no -z (it applies only to GBZ input), -s may be overridden
+vg call <outname>_spliced.xg -r <outname>_spliced.snarls -k <assay_dir>/<sample>.pack \
+    -s <sample> -a -t <cpus> | bgzip -c > <assay_dir>/<sample>.vcf.gz
+
+bcftools index -f <assay_dir>/<sample>.vcf.gz
+```
+
+Then, across all samples of one assay:
+
+```bash
+bcftools merge <all vcfs> -O z -o <assay_dir>/combined.vcf.gz
+bcftools query -f '%CHROM\t%POS\t%ID\t%REF\t%ALT\t%QUAL\t%FILTER[\t%GT\t%DP\t%AD{0}\t%AD{1}\t%GQ]\n' \
+    <assay_dir>/combined.vcf.gz | gzip -c > <assay_dir>/combined.vcf.tsv.gz
+```
+
+**Merge order.** Each samplesheet row carries a zero-based `idx` through the whole workflow. Before `BCFTOOLS_MERGE` the `(sample, vcf, csi, idx)` tuples are collected with `toSortedList { a, b -> a[3] <=> b[3] }` and reshaped into one tuple of lists, so the merged VCF sample columns follow samplesheet order regardless of task completion order. The notebook relied on shell-glob order (`for i in *.vcf.gz`), which is not reproducible across filesystems. Keep the explicit `items.collect { it[n] }` reshape: the channel `transpose()` operator is a Nextflow operator (it emits each list element as a separate item), not Groovy `List.transpose()`.
+
+`BCFTOOLS_INDEX` re-emits the VCF purely to carry it into the merge; its `publishDir` pattern is `*.csi`, so only the index is published there (the VCF itself was already published by `VG_CALL` under `<assay_dir>/`). Its publish path is the closure `{ "${params.outdir}/${assay_dir}" }`: a closure is the form Nextflow re-evaluates per task for a directive argument, while a `${...}` string inside a `publishDir` attribute is resolved once, when the process is defined, and fails on an input variable.
 
 ## DNA-seq (pool-seq) workflow
 
@@ -69,25 +102,11 @@ Per sample (single-end uses one `-f`, paired-end two, both inferred from the sam
 vg giraffe -Z <outname>.gbz -m <outname>.shortread.withzip.min \
     -z <outname>.shortread.zipcodes -d <outname>.dist -f <fq1> [-f <fq2>] \
     -t <cpus> > dna/<sample>.gam 2> dna/<sample>.gam.log
-
-vg pack -x <outname>.gbz -g dna/<sample>.gam -o dna/<sample>.pack -t <cpus> -Q 5
-
-vg call <outname>.gbz -r <outname>.snarls -k dna/<sample>.pack \
-    -s <sample> -z -a -t <cpus> | bgzip -c > dna/<sample>.vcf.gz
 ```
 
-Then, across all DNA samples:
+The giraffe log is published as its own process output (`dna/<sample>.gam.log`), not carried inside the sample tuple, so both assays feed the shared chain the same `(sample, file, idx)` shape.
 
-```bash
-bcftools index -f dna/<sample>.vcf.gz
-bcftools merge <all vcfs> -O z -o dna/combined.vcf.gz
-bcftools query -f '%CHROM\t%POS\t%ID\t%REF\t%ALT\t%QUAL\t%FILTER[\t%GT\t%DP\t%AD{0}\t%AD{1}\t%GQ]\n' \
-    dna/combined.vcf.gz | gzip -c > dna/combined.vcf.tsv.gz
-```
-
-**Merge order.** Each samplesheet row carries a zero-based `idx` through the whole workflow. Before `BCFTOOLS_MERGE_DNA` the `(sample, vcf, csi, idx)` tuples are collected with `toSortedList { a, b -> a[3] <=> b[3] }` and reshaped into one tuple of lists, so the merged VCF sample columns follow samplesheet order regardless of task completion order. The notebook relied on shell-glob order (`for i in *.vcf.gz`), which is not reproducible across filesystems.
-
-`BCFTOOLS_INDEX` re-emits the VCF purely to carry it into the merge; its `publishDir` pattern is `*.csi`, so only the index is published there (the VCF itself was already published by `VG_CALL_DNA`).
+The shared steps then run with `assay_dir = 'dna'`, the GBZ as pack/call graph (`VG_CALL` needs `graph_is_gbz = true`, hence `-z`) and no `vg call -s` override.
 
 ## RNA-seq workflow
 
@@ -107,12 +126,9 @@ vg index -j ref/<outname>_spliced.dist ref/<outname>_spliced.xg
 # 3. per sample
 vg mpmap -x ref/<outname>_spliced.xg -g ref/<outname>_spliced.gcsa -d ref/<outname>_spliced.dist \
     -n RNA -l short -F GAM -t <cpus> -f <fq1> [-f <fq2>] > rna/<sample>.gam
-vg pack -x ref/<outname>_spliced.xg -g rna/<sample>.gam -o rna/<sample>.pack -t <cpus> -Q 5
-vg call ref/<outname>_spliced.xg -r ref/<outname>_spliced.snarls -k rna/<sample>.pack \
-    -s <sample|-rna_call_sample> -z -a -t <cpus> | bgzip -c > rna/<sample>.vcf.gz
-bcftools query -f '%CHROM\t%POS\t%ID\t%REF\t%ALT\t%QUAL\t%FILTER[\t%GT\t%DP\t%AD{0}\t%AD{1}\t%GQ]\n' \
-    rna/<sample>.vcf.gz | gzip -c > rna/<sample>.vcf.tsv.gz
 ```
+
+The shared steps then run with `assay_dir = 'rna'`, the spliced `xg` as pack/call graph (`graph_is_gbz = false`, so no `-z`), and `vg call -s` = the sample id unless `--rna_call_sample` is set.
 
 Notes:
 
@@ -120,20 +136,22 @@ Notes:
 - `vg rna` output is a PackedGraph; `--gbz-format` is passed because the input is GBZ.
 - `vg prune` output is an ephemeral intermediate for the GCSA build: `VG_PRUNE` declares no `publishDir`, so `*_spliced.pruned.pg` never reaches `--outdir`. `VG_INDEX_GCSA` emits both `.gcsa` and `.gcsa.lcp` because `vg mpmap` needs them adjacent.
 - Snarls are not needed by `vg mpmap` when a dist index is supplied, but they are required by `vg call`; `trivial.snarls` is not needed to build the distance index.
-- No merge is performed for RNA-seq: each sample yields its own `.vcf.gz` + `.vcf.tsv.gz`, and cross-sample comparison is a downstream concern.
+- **`vg call -z` is DNA-only.** S06 L56 passes `-z` together with the spliced `xg`, but `-z` restricts calling to the GBZ haplotypes and `vg call` rejects it when the input graph is not a GBZ (see the tool's own check: *"-z can only be used when input graph is in GBZ format"*). The pipeline therefore passes it only for the GBZ (`VG_CALL`'s `graph_is_gbz`), which is also why S06's `-s dsim` is exposed as an opt-in `--rna_call_sample`.
+- **`-s` and merging.** `vg call -s` defaults to the sample id (unique per row, which is what `bcftools merge` needs for the sample columns). A fixed `--rna_call_sample` gives every RNA VCF the same sample column, so `bcftools merge` fails on duplicate sample names; use it only for single-sample RNA runs.
+- RNA-seq is indexed, merged and queried exactly like DNA-seq (one `combined.vcf.gz`/`combined.vcf.tsv.gz` per assay); cross-assay comparison remains a downstream concern.
 
 ## Processes and published outputs
 
 | Process | Tool | Published (relative to `--outdir`) |
 |---|---|---|
 | `CACTUS_PANGENOME` | `cactus-pangenome` | `ref/<outname>.gbz/.dist.bak/.shortread.withzip.min/.shortread.zipcodes/.snarls/.log/.gfa/.vcf` |
-| `VG_INDEX_DIST2` | `vg index -j` | `ref/<outname>.dist` |
+| `VG_INDEX_DIST_UPDATE` | `vg index -j` | `ref/<outname>.dist` |
 | `VG_GIRAFFE` | `vg giraffe` | `dna/<sample>.gam`, `dna/<sample>.gam.log` |
-| `VG_PACK_DNA` | `vg pack` | `dna/<sample>.pack` |
-| `VG_CALL_DNA` | `vg call \| bgzip` | `dna/<sample>.vcf.gz` |
-| `BCFTOOLS_INDEX` | `bcftools index` | `dna/<sample>.vcf.gz.csi` |
-| `BCFTOOLS_MERGE_DNA` | `bcftools merge` | `dna/combined.vcf.gz` |
-| `BCFTOOLS_QUERY_DNA` | `bcftools query` | `dna/combined.vcf.tsv.gz` |
+| `VG_PACK` | `vg pack` | `dna/<sample>.pack` or `rna/<sample>.pack` |
+| `VG_CALL` | `vg call \| bgzip` | `dna/<sample>.vcf.gz` or `rna/<sample>.vcf.gz` |
+| `BCFTOOLS_INDEX` | `bcftools index` | `dna/<sample>.vcf.gz.csi` or `rna/<sample>.vcf.gz.csi` |
+| `BCFTOOLS_MERGE` | `bcftools merge` | `dna/combined.vcf.gz` or `rna/combined.vcf.gz` |
+| `BCFTOOLS_QUERY` | `bcftools query` | `dna/combined.vcf.tsv.gz` or `rna/combined.vcf.tsv.gz` |
 | `RENAME_GTF` | host `sed` (`bin/rename_gtf_for_vg.sh`) | `ref/<ref_name>.gtf` |
 | `VG_RNA` | `vg rna` | `ref/<outname>_spliced.pg` |
 | `VG_INDEX_XG` | `vg index -x` | `ref/<outname>_spliced.xg` |
@@ -142,9 +160,8 @@ Notes:
 | `VG_SNARLS` | `vg snarls` | `ref/<outname>_spliced.snarls` |
 | `VG_INDEX_DIST_RNA` | `vg index -j` | `ref/<outname>_spliced.dist` |
 | `VG_MPMAP` | `vg mpmap` | `rna/<sample>.gam` |
-| `VG_PACK_RNA` | `vg pack` | `rna/<sample>.pack` |
-| `VG_CALL_RNA` | `vg call \| bgzip` | `rna/<sample>.vcf.gz` |
-| `BCFTOOLS_QUERY_RNA` | `bcftools query` | `rna/<sample>.vcf.tsv.gz` |
+
+`VG_PACK`, `VG_CALL`, `BCFTOOLS_INDEX`, `BCFTOOLS_MERGE` and `BCFTOOLS_QUERY` are defined once in `modules/local/variation/` and invoked by both workflows; `assay_dir` picks the published subdirectory.
 
 ## Provenance: pipeline stage → source notebook
 
@@ -155,8 +172,8 @@ Notes:
 | Pangenome graph build (`cactus-pangenome`) | [`notebooks/S05_pangenome_poolseq.qmd`](notebooks/S05_pangenome_poolseq.qmd) L23 |
 | Distance index rebuild + promotion (`.dist` → `.dist.bak`, `.dist2` → `.dist`) | S05 L26–28 |
 | DNA mapping (`vg giraffe`) | S05 L30–65; clean one-line version L208 |
-| Read support (`vg pack -Q 5`) | S05 L70–94; L211 |
-| Variant calling (`vg call -z -a`) | S05 L99–101; L214 |
+| Read support (`vg pack -Q 5`) | S05 L70–94; L211 (shared: also S06 L54) |
+| Variant calling (`vg call -z -a`) | S05 L99–101; L214 (shared: also S06 L56, without `-z`) |
 | `bcftools index` → `merge` → `query` (DNA) | S05 L104–108; L217–221 |
 | GTF contig rename | [`notebooks/S06_pangenome_rnaseq.qmd`](notebooks/S06_pangenome_rnaseq.qmd) L22 |
 | Spliced graph (`vg rna`) | S06 L25 |
@@ -164,24 +181,28 @@ Notes:
 | Snarls (`vg snarls`) | S06 L37 |
 | Spliced dist index | S06 L40 |
 | RNA mapping (`vg mpmap`) | S06 L44–51 |
-| RNA pack / call / query | S06 L54–58 |
+| `bcftools index` → `merge` → `query` (RNA) | **not in S06** (it queries per sample); S05 L104–108 applied to the RNA VCFs by request |
 | Long-read RNA-seq | [`notebooks/S07_pangenome_lrs.qmd`](notebooks/S07_pangenome_lrs.qmd) — empty (stub notebook); not implemented |
 | Downstream R analysis (site filtering, grenedalf comparison, plots) | S05 L111–202 — exploratory, deliberately **not** pipelined |
 
 ## Design decisions and deviations
 
 - **Both layouts in both assays.** The notebooks show paired-end DNA (S05) and single-end RNA (S06); the pipeline infers single-end vs paired-end per row for both assays from an empty `fastq_2`.
-- **Deterministic merge order.** DNA merge follows samplesheet order via the carried row index instead of shell-glob order (see DNA-seq section).
-- **Distance index promotion.** S05 L26–28 rebuilds the distance index after cactus and renames files on the fly. The pipeline encodes the same three commands, split by ownership: `CACTUS_PANGENOME` archives its index as `<outname>.dist.bak`, and `VG_INDEX_DIST2` builds `<outname>.dist2` and promotes it to `<outname>.dist`. Only one process ever publishes a file named `<outname>.dist` (`publish_dir_mode` is `copy`, so two publishers would race). The published layout has `<outname>.dist` (rebuilt, consumed by `vg giraffe -d`) and `<outname>.dist.bak` (archived cactus index); `<outname>.dist2` never reaches `--outdir`.
+- **Deterministic merge order.** Both assays merge in samplesheet order via the carried row index instead of shell-glob order (see the shared variant-calling section).
+- **Distance index promotion.** S05 L26–28 rebuilds the distance index after cactus and renames files on the fly. The pipeline encodes the same three commands, split by ownership: `CACTUS_PANGENOME` archives its index as `<outname>.dist.bak`, and `VG_INDEX_DIST_UPDATE` builds `<outname>.dist2` and promotes it to `<outname>.dist`. Only one process ever publishes a file named `<outname>.dist` (`publish_dir_mode` is `copy`, so two publishers would race). The published layout has `<outname>.dist` (rebuilt, consumed by `vg giraffe -d`) and `<outname>.dist.bak` (archived cactus index); `<outname>.dist2` never reaches `--outdir`.
 - **Explicit mapper format.** `vg mpmap` passes `-F GAM` explicitly; the notebook showed it inconsistently.
 - **Graph artifacts as plain files.** The notebook ran cactus manually under apptainer and used the `.gz` artifacts; the pipeline `gunzip`s `<outname>.gfa.gz` → `.gfa` and `<outname>.vcf.gz` → `.vcf` so the published layout is uniform and predictable.
-- **Directory names follow the data, not the file format.** Published output is grouped as `ref/` (reference graph, its indexes, the RNA spliced graph and the renamed GTF), `dna/` (DNA per-sample and combined VCF/TSV) and `rna/` (RNA per-sample VCF/TSV). The notebooks wrote graph artifacts to `gfa/` and everything vg-mapped to `gam/`, but `gfa`/`gam` name file formats rather than content categories. The names are literals in each module's output declaration (published layout, not a path knob), and the smoke test asserts that the retired `gfa/` and `gam/` directories are never created.
+- **Directory names follow the data, not the file format.** Published output is grouped as `ref/` (reference graph, its indexes, the RNA spliced graph and the renamed GTF), `dna/` (DNA per-sample and combined VCF/TSV) and `rna/` (RNA per-sample and combined VCF/TSV). The notebooks wrote graph artifacts to `gfa/` and everything vg-mapped to `gam/`, but `gfa`/`gam` name file formats rather than content categories. The directory names are the literal `assay_dir` values (`'dna'`/`'rna'`) each workflow passes to the shared modules — layout choices, not params — and the smoke test asserts that the retired `gfa/` and `gam/` directories are never created.
+- **Shared post-pack modules, one copy each.** From `vg pack` onwards the DNA and RNA steps differ only in the graph they read, the output subdirectory and two `vg call` details, so each step exists once under `modules/local/variation/`: `VG_PACK`, `VG_CALL`, `BCFTOOLS_INDEX`, `BCFTOOLS_MERGE`, `BCFTOOLS_QUERY`. `assay_dir` (`'dna'`/`'rna'`) selects the published subdirectory; `VG_CALL` also takes `graph_is_gbz` (the `-z` flag, GBZ input only) and `call_sample_name` (`''` → the sample id, RNA-seq may pass `--rna_call_sample`). `VG_GIRAFFE` publishes its `.gam.log` as a separate output so both assays hand the shared chain the same `(sample, file, idx)` tuple shape.
+- **One directory, one meaning.** `modules/local/reference/` holds every reference-side step: GBZ construction and its distance index, the GTF contig rename, and the spliced graph with its xg/gcsa/snarls/dist indexes. `modules/local/dnaseq/` and `modules/local/rnaseq/` hold only the per-sample mappers (`VG_GIRAFFE`, `VG_MPMAP`), and `modules/local/variation/` holds the shared pack → query chain. The spliced-graph modules live in `reference/` but are invoked by `RNASEQ` rather than `REFERENCE`, because they need `--gtf`, which a DNA-only run must not require.
 - **`ref_name` couples cactus and the GTF.** `params.ref_name` is both `cactus --reference` and the GTF rename prefix, so it must equal the reference sample name in the seqfile, or the renamed GTF contig names will not match GBZ haplotype paths.
 - **Contig-agnostic GTF rename.** The notebook's `sed 's/^(NC_|NW_)/<ref>#0#\1/'` (S06 L22) only works for RefSeq-style accessions; reference assemblies routinely use `chr*`, `scaffold*` or other names, so the pipeline prefixes the first tab-delimited field of every non-comment line instead. Comment/blank lines and lines without a tab (not GTF) are passed through unchanged rather than guessed at, and an already-renamed GTF must not be fed in again.
 - **No replicate and no per-sample reference.** Derived from what the notebooks actually require: every sample maps to the one shared graph, and pooled samples are a single sample (pooling happens upstream).
 - **Threshold exposure.** The hard-coded `-Q 5` pack filter became `params.min_mapq` (default 5, i.e. the notebook value); thread counts, cactus cores, and `gcsa_tmpdir` are likewise params.
 - **Pass-through flags.** `--permissiveContigFilter`, `--haplo`, `--chrom-vg clip filter`, `--chrom-og full`, and `--viz` are passed to cactus exactly as in the notebook.
 - **`RENAME_GTF` is container-less.** The rename is a single contig-agnostic `sed` substitution; it uses the helper in `bin/` (available on `PATH` in the Nextflow script environment) rather than pulling a container.
+- **`vg call -z` is DNA-only.** S06 L56 copies `-z` from the DNA command, but `-z` restricts calling to the GBZ haplotypes and `vg call` rejects it for a non-GBZ graph, so `VG_CALL` passes it only when the graph is the GBZ (`graph_is_gbz`); the RNA (`-a` only) and DNA (`-z -a`) flag sets are otherwise unchanged from the notebooks.
+- **RNA cross-sample merge (requested extension).** S06 stops at a per-sample `bcftools query`; at the user's request the RNA VCFs are now indexed, merged and queried per assay exactly like the DNA ones, using the shared modules, so the pipeline produces `rna/combined.vcf.gz` and `rna/combined.vcf.tsv.gz` instead of per-sample TSVs. There is no notebook source for this step (see provenance).
 
 ## Known limitations
 
@@ -192,7 +213,8 @@ Notes:
 - `publish_dir_mode` defaults to `copy`, which will copy large GAM/pack files. `symlink` is recommended for real runs.
 - `CACTUS_PANGENOME` deletes `<outdir>/toil_work` only when it succeeds. A failed or interrupted cactus run leaves the Toil jobstore behind, and rerunning into the same `--outdir` will hand Toil an existing jobstore; remove `<outdir>/toil_work` manually before such a rerun.
 - `RENAME_GTF` runs on the host with `sed`, so `bin/` must be reachable on `PATH`. It assumes a tab-delimited GTF: lines without a tab are passed through unprefixed rather than guessed at.
-- RNA-seq has no merge step by design, so cross-sample RNA comparison must be done downstream of the per-sample TSVs.
+- RNA and DNA are merged separately, one `combined.vcf.gz`/`combined.vcf.tsv.gz` per assay: there is no cross-assay merge, and cross-assay comparison stays downstream.
+- `--rna_call_sample` sets a single fixed `vg call -s` for every RNA sample, so with more than one RNA sample the per-sample VCFs share a sample column and `bcftools merge` fails on duplicate sample names. Leave it unset (the default: sample id) unless the run has a single RNA sample.
 - No biological validation is automated in this repository: the smoke test is stub-only, and real-data correctness is established by the notebook comparisons (e.g. S05's grenedalf cross-check), not by CI.
 - The `test` profile's `withName` overrides exist because profile-level params do not propagate into the base `process` block; keep them in sync when adding processes.
 
@@ -211,7 +233,7 @@ Steps:
 1. **bin script unit check** — `bash -n bin/rename_gtf_for_vg.sh`, then run it on `test/data/ref_a.gtf` and `diff` the result against `test/data/expected_ref_a.gtf` (regression guard for the `NC_`/`NW_` case → `ref_a#0#`), plus inline cases asserting that any contig name (`scaffold_b1`, `chr1`, `CM012345.1`, `1`) is prefixed, that comment/blank/non-tab lines pass through unchanged, and that sed-special characters in the sample name are emitted literally.
 2. **Config parse** — `./nextflow config . -profile test`.
 3. **`--run dnaseq`** — asserts `ref/test.gbz`, `.dist`, `.dist.bak`, `.shortread.withzip.min`, `.shortread.zipcodes`, `.snarls`, `.log`, `dna/combined.vcf.gz`, `dna/combined.vcf.tsv.gz`, and `dna/<sample>.{gam,gam.log,pack,vcf.gz,vcf.gz.csi}` for `dna_a`, `dna_b`, `dna_hybrid`, `dna_c`; also asserts that no `*.dist2` is published (intermediate), that `results/rna` is **not** created, and that the retired `results/gfa` and `results/gam` directories do not exist.
-4. **`--run rnaseq`** — asserts `ref/ref_a.gtf`, `ref/test_spliced.{pg,xg,gcsa,gcsa.lcp,snarls,dist}` and `rna/<sample>.{gam,pack,vcf.gz,vcf.tsv.gz}` for `rna_a`, `rna_b`; asserts no `*pruned.pg*` is published (ephemeral intermediate), that `results/dna` is **not** created, and that the retired `results/gfa` and `results/gam` directories do not exist.
+4. **`--run rnaseq`** — asserts `ref/ref_a.gtf`, `ref/test_spliced.{pg,xg,gcsa,gcsa.lcp,snarls,dist}`, `rna/combined.vcf.gz`, `rna/combined.vcf.tsv.gz` and `rna/<sample>.{gam,pack,vcf.gz,vcf.gz.csi}` for `rna_a`, `rna_b`; asserts no per-sample `rna/<sample>.vcf.tsv.gz` is published (retired), no `*pruned.pg*` is published (ephemeral intermediate), that `results/dna` is **not** created, and that the retired `results/gfa` and `results/gam` directories do not exist.
 5. **Default entry (`both`)** — one run with `-with-dag`, asserting both DNA and RNA outputs exist, the DAG file is non-empty, and `CACTUS_PANGENOME` appears exactly once in the DAG (single shared reference).
 6. **Negative tests** — samplesheets with a bogus assay and with an empty `fastq_1` must fail, and the error messages must contain `Unknown assay` / `fastq_1 missing`.
 
