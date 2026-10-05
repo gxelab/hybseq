@@ -89,10 +89,27 @@ Container images (versions the pipeline is developed and tested against):
 
 **Profiles**
 
-- `docker` — run with Docker images
-- `apptainer` — run with Apptainer; local SIF paths override the registry images:
-  `-profile apptainer --vg_sif /path/to/vg.sif --cactus_sif /path/to/cactus.sif --bcftools_sif /path/to/bcftools.sif`
-  Bind-mount your data directories the same way you would with `apptainer exec`, e.g. `-c 'apptainer.runOptions = "--bind /my/data"'`.
+- `docker` — run with Docker images.
+- `apptainer` — run with Apptainer. Local SIF paths override the registry images:
+
+  ```bash
+  -profile apptainer \
+    --vg_sif /path/to/vg.sif \
+    --cactus_sif /path/to/cactus.sif \
+    --bcftools_sif /path/to/bcftools.sif
+  ```
+
+  To bind-mount host directories into Apptainer containers, provide a Nextflow configuration file containing:
+
+  ```groovy
+  apptainer.runOptions = '--bind /my/data'
+  ```
+
+  and pass it with `-c`:
+
+  ```bash
+  nextflow run ... -profile apptainer -c apptainer.config
+  ```
 - `test` — tiny synthetic inputs for the smoke test (see [development.md](development.md#smoke-test))
 
 Resource note: cactus RAM/time are config defaults (64 GB / 48 h) and should be adjusted to your assemblies. All cactus Toil scratch stays under `--outdir` (`toil_work/`, with the jobstore at `toil_work/js`) and is removed when the cactus task finishes; nothing in `toil_work/` is published.
