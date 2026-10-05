@@ -2,7 +2,9 @@
 
 A Nextflow DSL2 pipeline for **pangenome-graph based processing of interspecies hybrid genomic data** (DNA-seq and RNA-seq) built with [Minigraph-Cactus](https://github.com/ComparativeGenomicsToolkit/cactus) and [vg](https://github.com/vgteam/vg).
 
-The pipeline builds one pangenome graph from a reference and one or more additional assemblies, maps short reads to it, computes read support, calls variants per sample, and tabulates the results. DNA-seq and RNA-seq are separate workflows that share the same reference graph.
+The pipeline builds a pangenome graph from a reference assembly and one or more additional assemblies. It maps short reads to this graph, using a spliced graph derived from it for RNA-seq, then computes read support, calls variants for each sample, and tabulates the results by assay.
+
+DNA-seq and RNA-seq are implemented as separate workflows, but share the same reference graph and the same downstream steps for read-support calculation, variant calling, and result tabulation.
 
 ## Workflows
 
