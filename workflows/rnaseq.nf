@@ -40,15 +40,26 @@ workflow RNASEQ {
     // The spliced xg is not a GBZ, so vg call gets no -z (that flag only applies to
     // GBZ input); --rna_call_sample overrides vg call -s, otherwise the sample id.
     ch_vcf  = VG_CALL(ch_pack, ch_xg.xg, ch_snarls.snarls, 'rna', false, params.rna_call_sample ?: '')
-    ch_csi  = BCFTOOLS_INDEX(ch_vcf, 'rna')
 
-    // Same samplesheet-order merge as the DNA-seq workflow: the carried row index
-    // makes the order deterministic regardless of task completion order, and the
-    // sorted list is reshaped into the single tuple of lists BCFTOOLS_MERGE declares.
-    ch_merge_in = ch_csi.toSortedList { a, b -> a[3] <=> b[3] }.map { items -> [items.collect { it[0] }, items.collect { it[1] }, items.collect { it[2] }, items.collect { it[3] }] }
+    // Index and merge only when the assay has more than one sample, exactly as in the
+    // DNA-seq workflow: a single sample has nothing to merge, so BCFTOOLS_QUERY reads
+    // its VCF directly.
+    ch_sorted = ch_vcf.toSortedList { a, b -> a[3] <=> b[3] }   // one emission: every sample, samplesheet order
+    ch_multi  = ch_sorted.filter { it.size() > 1 }
+    ch_single = ch_sorted.filter { it.size() == 1 }
+
+    // flatMap (not flatten, which recurses into the tuples) turns the collected list
+    // back into one item per sample; with a single sample the channel stays empty.
+    ch_csi = BCFTOOLS_INDEX(ch_multi.flatMap { items -> items }, 'rna')
+    // Sorted (sample, vcf, csi, idx) tuples -> the single tuple of lists BCFTOOLS_MERGE
+    // declares; an empty collection (single sample) is dropped before the reshape.
+    ch_indexed  = ch_csi.toSortedList { a, b -> a[3] <=> b[3] }.filter { !it.isEmpty() }
+    ch_merge_in = ch_indexed.map { items -> [items.collect { it[0] }, items.collect { it[1] }, items.collect { it[2] }, items.collect { it[3] }] }
     ch_merged   = BCFTOOLS_MERGE(ch_merge_in, 'rna')
 
-    ch_tsv = BCFTOOLS_QUERY(ch_merged.combined_vcf, 'rna')
+    // Merged VCF when there was something to merge, the sample VCF when there was not.
+    ch_query_in = ch_merged.combined_vcf.mix(ch_single.map { items -> items[0][1] })
+    ch_tsv      = BCFTOOLS_QUERY(ch_query_in, 'rna')
 
     emit:
     combined_vcf = ch_merged.combined_vcf

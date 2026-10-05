@@ -139,7 +139,49 @@ grep -q 'CACTUS_PANGENOME' "$RESULTS/dag.dot" || fail "CACTUS_PANGENOME missing 
 pass "default entry outputs complete (reference workflow invoked once for both assays)"
 clean
 
-echo "== 6. negative tests =="
+echo "== 6. single-sample assays: no index, no merge (stub-run) =="
+# One row per assay: each run sees exactly one sample for its assay, so there is
+# nothing to merge and the sample VCF must be queried directly.
+tmp_ss=$(mktemp)
+{
+    echo "sample,assay,fastq_1,fastq_2"
+    echo "dna_solo,dnaseq,test/data/fastq/dna_a_R1.fq.gz,test/data/fastq/dna_a_R2.fq.gz"
+    echo "rna_solo,rnaseq,test/data/fastq/rna_a.fastq.gz"
+} > "$tmp_ss"
+
+if out=$($NF run . -profile $PROFILE -stub-run --run dnaseq --samplesheet "$tmp_ss" 2>&1); then :; else
+    echo "$out" | tail -20
+    fail "single-sample dnaseq run failed"
+fi
+for f in "$RESULTS/dna/dna_solo.vcf.gz" "$RESULTS/dna/combined.vcf.tsv.gz"; do
+    [ -f "$f" ] || fail "missing expected output: $f"
+done
+for f in "$RESULTS/dna/dna_solo.vcf.gz.csi" "$RESULTS/dna/combined.vcf.gz"; do
+    [ ! -f "$f" ] || fail "single sample must not publish: $f"
+done
+if echo "$out" | grep -q -E 'BCFTOOLS_INDEX|BCFTOOLS_MERGE'; then
+    fail "index/merge ran for a single dnaseq sample"
+fi
+clean
+
+if out=$($NF run . -profile $PROFILE -stub-run --run rnaseq --samplesheet "$tmp_ss" 2>&1); then :; else
+    echo "$out" | tail -20
+    fail "single-sample rnaseq run failed"
+fi
+for f in "$RESULTS/rna/rna_solo.vcf.gz" "$RESULTS/rna/combined.vcf.tsv.gz"; do
+    [ -f "$f" ] || fail "missing expected output: $f"
+done
+for f in "$RESULTS/rna/rna_solo.vcf.gz.csi" "$RESULTS/rna/combined.vcf.gz"; do
+    [ ! -f "$f" ] || fail "single sample must not publish: $f"
+done
+if echo "$out" | grep -q -E 'BCFTOOLS_INDEX|BCFTOOLS_MERGE'; then
+    fail "index/merge ran for a single rnaseq sample"
+fi
+clean
+rm -f "$tmp_ss"
+pass "single-sample assays publish the queried table without index or merge"
+
+echo "== 7. negative tests =="
 tmp_ss=$(mktemp)
 {
     echo "sample,assay,fastq_1,fastq_2"

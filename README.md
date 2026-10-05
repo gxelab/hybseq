@@ -13,7 +13,7 @@ The pipeline builds one pangenome graph from a reference and one or more additio
 3. Map reads to the graph with **vg giraffe** (vg 1.73; single-end or paired-end)
 4. Compute read support with **vg pack** (`-Q 5`)
 5. Call variants per sample with **vg call** (`-z -a`)
-6. Index, merge and tabulate all samples with **bcftools** (`index -f` → `merge` → `query`)
+6. Index, merge and tabulate all samples with **bcftools** (`index -f` → `merge` → `query`; skipped for a single sample, which is queried directly)
 
 ### RNA-seq
 
@@ -22,7 +22,7 @@ The pipeline builds one pangenome graph from a reference and one or more additio
 3. Index: `vg index -x` (xg) → `vg prune` → `vg index -g` (GCSA) → `vg snarls` → `vg index -j` (dist)
 4. Map reads with **vg mpmap** (`-n RNA -l short`; single-end or paired-end)
 5. Read support (**vg pack**, `-Q 5`) and variant calling (**vg call**, `-a`; no `-z`, which applies only to a GBZ graph) on the spliced graph
-6. Index, merge and tabulate all samples with **bcftools** (`index -f` → `merge` → `query`)
+6. Index, merge and tabulate all samples with **bcftools** (`index -f` → `merge` → `query`; skipped for a single sample, which is queried directly)
 
 ## DNA-seq vs RNA-seq
 
@@ -120,10 +120,12 @@ Published under `--outdir` (`results/` by default):
 | dir | contents |
 |---|---|
 | `ref/` | reference graph + index artifacts: `<outname>.gbz/.dist/.dist.bak/.shortread.withzip.min/.shortread.zipcodes/.snarls/.log/.gfa/.vcf`, the renamed `<ref_name>.gtf`, and the spliced-graph artifacts `<outname>_spliced.pg/.xg/.gcsa/.gcsa.lcp/.snarls/.dist` |
-| `dna/` | per DNA sample: `<sample>.gam`, `<sample>.gam.log`, `<sample>.pack`, `<sample>.vcf.gz`, `<sample>.vcf.gz.csi`; combined: `combined.vcf.gz`, `combined.vcf.tsv.gz` |
-| `rna/` | per RNA sample: `<sample>.gam`, `<sample>.pack`, `<sample>.vcf.gz`, `<sample>.vcf.gz.csi`; combined: `combined.vcf.gz`, `combined.vcf.tsv.gz` |
+| `dna/` | per DNA sample: `<sample>.gam`, `<sample>.gam.log`, `<sample>.pack`, `<sample>.vcf.gz`; with ≥2 DNA samples also `<sample>.vcf.gz.csi` per sample and combined: `combined.vcf.gz`, `combined.vcf.tsv.gz`; with a single DNA sample: `combined.vcf.tsv.gz` only |
+| `rna/` | per RNA sample: `<sample>.gam`, `<sample>.pack`, `<sample>.vcf.gz`; with ≥2 RNA samples also `<sample>.vcf.gz.csi` per sample and combined: `combined.vcf.gz`, `combined.vcf.tsv.gz`; with a single RNA sample: `combined.vcf.tsv.gz` only |
 
 `<outname>_spliced.pruned.pg` and `<outname>.dist2` are intermediates and are never published; `<outname>.dist.bak` is the archived cactus distance index and `<outname>.dist` is the rebuilt index used for mapping. The TSVs carry one row per VCF record (CHROM, POS, ID, REF, ALT, QUAL, FILTER, per-sample GT, DP, AD{0}, AD{1}, GQ) and are suited as inputs to downstream tabular analyses.
+
+`<sample>.vcf.gz.csi` and `combined.vcf.gz` are produced only when an assay has more than one sample: an index only enables merging, and a single sample has nothing to merge, so the sample VCF is queried directly and only the assay-level table (`combined.vcf.tsv.gz`) is published. The table's columns are the same either way.
 
 ## AI assistance
 

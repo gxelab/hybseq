@@ -38,7 +38,7 @@ main.nf
 | `DNASEQ` | `gbz`, `dist`, `min`, `zipcodes`, `snarls`, `samples` (`[sample,assay,fq1,fq2,idx]`) | `combined_vcf`, `tsv` |
 | `RNASEQ` | `gbz`, `gtf`, `samples` | `combined_vcf`, `tsv` |
 
-Each workflow filters `samples` by assay and errors out with `No dnaseq/rnaseq samples found in the samplesheet` when the filtered channel is empty. `params.run` is validated in `main.nf` (`both|dnaseq|rnaseq`), and `--run rnaseq|both` without `--gtf` errors before any task starts.
+Each workflow filters `samples` by assay and errors out with `No dnaseq/rnaseq samples found in the samplesheet` when the filtered channel is empty. `params.run` is validated in `main.nf` (`both|dnaseq|rnaseq`), and `--run rnaseq|both` without `--gtf` errors before any task starts. `combined_vcf` is an empty channel when the assay has a single sample (nothing is merged); `tsv` is always emitted.
 
 ## Reference workflow
 
@@ -82,7 +82,7 @@ vg call <outname>_spliced.xg -r <outname>_spliced.snarls -k <assay_dir>/<sample>
 bcftools index -f <assay_dir>/<sample>.vcf.gz
 ```
 
-Then, across all samples of one assay:
+Then, when the assay has more than one sample, across all of them:
 
 ```bash
 bcftools merge <all vcfs> -O z -o <assay_dir>/combined.vcf.gz
@@ -90,7 +90,9 @@ bcftools query -f '%CHROM\t%POS\t%ID\t%REF\t%ALT\t%QUAL\t%FILTER[\t%GT\t%DP\t%AD
     <assay_dir>/combined.vcf.gz | gzip -c > <assay_dir>/combined.vcf.tsv.gz
 ```
 
-**Merge order.** Each samplesheet row carries a zero-based `idx` through the whole workflow. Before `BCFTOOLS_MERGE` the `(sample, vcf, csi, idx)` tuples are collected with `toSortedList { a, b -> a[3] <=> b[3] }` and reshaped into one tuple of lists, so the merged VCF sample columns follow samplesheet order regardless of task completion order. The notebook relied on shell-glob order (`for i in *.vcf.gz`), which is not reproducible across filesystems. Keep the explicit `items.collect { it[n] }` reshape: the channel `transpose()` operator is a Nextflow operator (it emits each list element as a separate item), not Groovy `List.transpose()`.
+**Single-sample assays skip index and merge.** With exactly one sample there is nothing to merge, and the index exists only to enable merging, so neither `bcftools index` nor `bcftools merge` runs: `BCFTOOLS_QUERY` reads the sample's own VCF directly (`bcftools query` needs no index unless a region is requested) and writes the same `<assay_dir>/combined.vcf.tsv.gz` table. Such an assay publishes no `<sample>.vcf.gz.csi` and no `combined.vcf.gz`. The branch lives in each workflow, not in a module: both sample VCFs are collected once with `toSortedList { a, b -> a[3] <=> b[3] }` (samplesheet order), split into the single-sample and multi-sample cases, the multi-sample list is turned back into per-sample items for `BCFTOOLS_INDEX` with `flatMap { items -> items }` (not `flatten`, which recurses into the tuples), the indexed tuples are re-collected for `BCFTOOLS_MERGE`, and the merged VCF is `mix`ed with the single sample's VCF as the input of `BCFTOOLS_QUERY`. A collecting operator on an empty channel emits an **empty list** (verified on the installed Nextflow), so the multi-sample branch drops it with `filter { !it.isEmpty() }` before reshaping; without that guard the merge would receive an empty tuple of lists.
+
+**Merge order.** With more than one sample, each samplesheet row carries a zero-based `idx` through the whole workflow. Before `BCFTOOLS_MERGE` the `(sample, vcf, csi, idx)` tuples are collected with `toSortedList { a, b -> a[3] <=> b[3] }` and reshaped into one tuple of lists, so the merged VCF sample columns follow samplesheet order regardless of task completion order. The notebook relied on shell-glob order (`for i in *.vcf.gz`), which is not reproducible across filesystems. Keep the explicit `items.collect { it[n] }` reshape: the channel `transpose()` operator is a Nextflow operator (it transposes, it does not split a list into items), not Groovy `List.transpose()`.
 
 `BCFTOOLS_INDEX` re-emits the VCF purely to carry it into the merge; its `publishDir` pattern is `*.csi`, so only the index is published there (the VCF itself was already published by `VG_CALL` under `<assay_dir>/`). Its publish path is the closure `{ "${params.outdir}/${assay_dir}" }`: a closure is the form Nextflow re-evaluates per task for a directive argument, while a `${...}` string inside a `publishDir` attribute is resolved once, when the process is defined, and fails on an input variable.
 
@@ -149,8 +151,8 @@ Notes:
 | `VG_GIRAFFE` | `vg giraffe` | `dna/<sample>.gam`, `dna/<sample>.gam.log` |
 | `VG_PACK` | `vg pack` | `dna/<sample>.pack` or `rna/<sample>.pack` |
 | `VG_CALL` | `vg call \| bgzip` | `dna/<sample>.vcf.gz` or `rna/<sample>.vcf.gz` |
-| `BCFTOOLS_INDEX` | `bcftools index` | `dna/<sample>.vcf.gz.csi` or `rna/<sample>.vcf.gz.csi` |
-| `BCFTOOLS_MERGE` | `bcftools merge` | `dna/combined.vcf.gz` or `rna/combined.vcf.gz` |
+| `BCFTOOLS_INDEX` | `bcftools index` | `dna/<sample>.vcf.gz.csi` or `rna/<sample>.vcf.gz.csi` — only when that assay has ≥2 samples |
+| `BCFTOOLS_MERGE` | `bcftools merge` | `dna/combined.vcf.gz` or `rna/combined.vcf.gz` — only when that assay has ≥2 samples |
 | `BCFTOOLS_QUERY` | `bcftools query` | `dna/combined.vcf.tsv.gz` or `rna/combined.vcf.tsv.gz` |
 | `RENAME_GTF` | host `sed` (`bin/rename_gtf_for_vg.sh`) | `ref/<ref_name>.gtf` |
 | `VG_RNA` | `vg rna` | `ref/<outname>_spliced.pg` |
@@ -195,6 +197,7 @@ Notes:
 - **Directory names follow the data, not the file format.** Published output is grouped as `ref/` (reference graph, its indexes, the RNA spliced graph and the renamed GTF), `dna/` (DNA per-sample and combined VCF/TSV) and `rna/` (RNA per-sample and combined VCF/TSV). The notebooks wrote graph artifacts to `gfa/` and everything vg-mapped to `gam/`, but `gfa`/`gam` name file formats rather than content categories. The directory names are the literal `assay_dir` values (`'dna'`/`'rna'`) each workflow passes to the shared modules — layout choices, not params — and the smoke test asserts that the retired `gfa/` and `gam/` directories are never created.
 - **Shared post-pack modules, one copy each.** From `vg pack` onwards the DNA and RNA steps differ only in the graph they read, the output subdirectory and two `vg call` details, so each step exists once under `modules/local/variation/`: `VG_PACK`, `VG_CALL`, `BCFTOOLS_INDEX`, `BCFTOOLS_MERGE`, `BCFTOOLS_QUERY`. `assay_dir` (`'dna'`/`'rna'`) selects the published subdirectory; `VG_CALL` also takes `graph_is_gbz` (the `-z` flag, GBZ input only) and `call_sample_name` (`''` → the sample id, RNA-seq may pass `--rna_call_sample`). `VG_GIRAFFE` publishes its `.gam.log` as a separate output so both assays hand the shared chain the same `(sample, file, idx)` tuple shape.
 - **One directory, one meaning.** `modules/local/reference/` holds every reference-side step: GBZ construction and its distance index, the GTF contig rename, and the spliced graph with its xg/gcsa/snarls/dist indexes. `modules/local/dnaseq/` and `modules/local/rnaseq/` hold only the per-sample mappers (`VG_GIRAFFE`, `VG_MPMAP`), and `modules/local/variation/` holds the shared pack → query chain. The spliced-graph modules live in `reference/` but are invoked by `RNASEQ` rather than `REFERENCE`, because they need `--gtf`, which a DNA-only run must not require.
+- **Single-sample assays skip index and merge.** `bcftools index` exists only to enable `bcftools merge`, and a single sample has nothing to merge, so both steps are skipped and the sample's VCF goes straight to `BCFTOOLS_QUERY` (which needs no index without a region). The consequences are deliberate: that assay publishes `<sample>.vcf.gz` and the assay-level `combined.vcf.tsv.gz` (the same columns as a merged run), but no `.csi` and no `combined.vcf.gz`; `combined_vcf` is an empty channel for such a run. The gating is channel-level in each workflow, so no task is even submitted and no param or module changes.
 - **`ref_name` couples cactus and the GTF.** `params.ref_name` is both `cactus --reference` and the GTF rename prefix, so it must equal the reference sample name in the seqfile, or the renamed GTF contig names will not match GBZ haplotype paths.
 - **Contig-agnostic GTF rename.** The notebook's `sed 's/^(NC_|NW_)/<ref>#0#\1/'` (S06 L22) only works for RefSeq-style accessions; reference assemblies routinely use `chr*`, `scaffold*` or other names, so the pipeline prefixes the first tab-delimited field of every non-comment line instead. Comment/blank lines and lines without a tab (not GTF) are passed through unchanged rather than guessed at, and an already-renamed GTF must not be fed in again.
 - **No replicate and no per-sample reference.** Derived from what the notebooks actually require: every sample maps to the one shared graph, and pooled samples are a single sample (pooling happens upstream).
@@ -235,7 +238,8 @@ Steps:
 3. **`--run dnaseq`** — asserts `ref/test.gbz`, `.dist`, `.dist.bak`, `.shortread.withzip.min`, `.shortread.zipcodes`, `.snarls`, `.log`, `dna/combined.vcf.gz`, `dna/combined.vcf.tsv.gz`, and `dna/<sample>.{gam,gam.log,pack,vcf.gz,vcf.gz.csi}` for `dna_a`, `dna_b`, `dna_hybrid`, `dna_c`; also asserts that no `*.dist2` is published (intermediate), that `results/rna` is **not** created, and that the retired `results/gfa` and `results/gam` directories do not exist.
 4. **`--run rnaseq`** — asserts `ref/ref_a.gtf`, `ref/test_spliced.{pg,xg,gcsa,gcsa.lcp,snarls,dist}`, `rna/combined.vcf.gz`, `rna/combined.vcf.tsv.gz` and `rna/<sample>.{gam,pack,vcf.gz,vcf.gz.csi}` for `rna_a`, `rna_b`; asserts no per-sample `rna/<sample>.vcf.tsv.gz` is published (retired), no `*pruned.pg*` is published (ephemeral intermediate), that `results/dna` is **not** created, and that the retired `results/gfa` and `results/gam` directories do not exist.
 5. **Default entry (`both`)** — one run with `-with-dag`, asserting both DNA and RNA outputs exist, the DAG file is non-empty, and `CACTUS_PANGENOME` appears exactly once in the DAG (single shared reference).
-6. **Negative tests** — samplesheets with a bogus assay and with an empty `fastq_1` must fail, and the error messages must contain `Unknown assay` / `fastq_1 missing`.
+6. **Single-sample assays** — one `--run dnaseq` and one `--run rnaseq` with a samplesheet holding exactly one row per assay: asserts the run succeeds, publishes `<assay_dir>/<sample>.vcf.gz` and `<assay_dir>/combined.vcf.tsv.gz`, publishes **no** `<sample>.vcf.gz.csi` and **no** `combined.vcf.gz`, and does not submit `BCFTOOLS_INDEX`/`BCFTOOLS_MERGE` (checked in the captured run log).
+7. **Negative tests** — samplesheets with a bogus assay and with an empty `fastq_1` must fail, and the error messages must contain `Unknown assay` / `fastq_1 missing`.
 
 Success ends with `ALL SMOKE TESTS PASSED`.
 
