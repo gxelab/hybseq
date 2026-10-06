@@ -8,33 +8,51 @@ DNA-seq and RNA-seq are implemented as separate workflows, but share the same re
 
 ## Workflows
 
-### DNA-seq / pool-seq
+The pangenome graph is built once and reused by both assays; after mapping, DNA-seq and RNA-seq run the same read-support, variant-calling, and tabulation steps. `--run` selects which workflows execute (`both` by default).
+
+### Pangenome graph construction
+
+**Built once per run, for both assays** (reference workflow):
 
 1. Build the pangenome graph with **Minigraph-Cactus 3.1.4** (`cactus-pangenome`, GBZ/GFA/VCF outputs, giraffe mapping indexes)
 2. Rebuild the distance index after cactus: archive the cactus-produced `<outname>.dist` as `<outname>.dist.bak`, build the index with `vg index -j`, and promote the rebuilt index to `<outname>.dist`
-3. Map reads to the graph with **vg giraffe** (vg 1.73; single-end or paired-end)
-4. Compute read support with **vg pack** (`-Q 5`)
-5. Call variants per sample with **vg call** (`-z -a`)
-6. Index, merge and tabulate all samples with **bcftools** (`index -f` → `merge` → `query`; skipped for a single sample, which is queried directly)
 
-### RNA-seq
+**Needed for RNA-seq only** (skipped entirely with `--run dnaseq`; requires `--gtf`):
 
-1. Prefix every GTF contig with `<ref>#0#` so the names match GBZ haplotype-path names — any contig naming scheme (`bin/rename_gtf_for_vg.sh`)
-2. Build the spliced pangenome graph with **vg rna** (PackedGraph, `--use-hap-ref --gbz-format`)
-3. Index: `vg index -x` (xg) → `vg prune` → `vg index -g` (GCSA) → `vg snarls` → `vg index -j` (dist)
-4. Map reads with **vg mpmap** (`-n RNA -l short`; single-end or paired-end)
-5. Read support (**vg pack**, `-Q 5`) and variant calling (**vg call**, `-a`; no `-z`, which applies only to a GBZ graph) on the spliced graph
-6. Index, merge and tabulate all samples with **bcftools** (`index -f` → `merge` → `query`; skipped for a single sample, which is queried directly)
+3. Prefix every GTF contig with `<ref>#0#` so the names match GBZ haplotype-path names — any contig naming scheme (`bin/rename_gtf_for_vg.sh`)
+4. Build the spliced pangenome graph with **vg rna** (PackedGraph, `--use-hap-ref --gbz-format`)
+5. Index the spliced graph: `vg index -x` (xg) → `vg prune` → `vg index -g` (GCSA) → `vg snarls` → `vg index -j` (dist)
 
-## DNA-seq vs RNA-seq
+A DNA-seq analysis uses steps 1–2 only; an RNA-seq analysis uses all five. Step 2 runs whichever assay is selected (it belongs to the shared reference workflow), but only DNA-seq consumes it: `vg giraffe -d` takes the rebuilt `<outname>.dist`, whereas `vg mpmap -d` takes the spliced `<outname>_spliced.dist` from step 5.
+
+### Read mapping
+
+One mapper run per sample, single-end or paired-end (layout inferred from the samplesheet, one `-f` per read file — see [Samplesheet format](#samplesheet-format)). Only the graph mapped against and the mapper differ between the assays:
 
 | | DNA-seq | RNA-seq |
 |---|---|---|
-| Graph mapped against | GBZ (`<outname>.gbz`) | Spliced PackedGraph built by `vg rna` from the same GBZ |
-| Mapper | `vg giraffe -Z gbz -m min -z zipcodes -d dist`, one `-f` per read file | `vg mpmap -x xg -g gcsa -d dist -n RNA -l short`, one `-f` per read file |
-| Read support / variant call inputs | `-x <outname>.gbz`, cactus snarls | `-x <outname>_spliced.xg`, `<outname>_spliced.snarls` |
-| VCF aggregation | `bcftools index` + **`bcftools merge`** of all samples, then one `query` | same shared steps as DNA-seq, one `combined.vcf.gz`/`.tsv.gz` per assay |
-| Reads per sample | single-end or paired-end (inferred from the samplesheet) | single-end or paired-end (inferred from the samplesheet) |
+| Graph mapped against | GBZ (`<outname>.gbz`) | spliced PackedGraph built by `vg rna` (`<outname>_spliced.pg`) |
+| Mapper | `vg giraffe -Z <outname>.gbz -m <outname>.shortread.withzip.min -z <outname>.shortread.zipcodes -d <outname>.dist` | `vg mpmap -x <outname>_spliced.xg -g <outname>_spliced.gcsa -d <outname>_spliced.dist -n RNA -l short` |
+| Indexes needed | steps 1–2 (giraffe min/zipcodes + rebuilt distance index) | step 5 (spliced xg/gcsa/dist) |
+| Reads per sample | single-end or paired-end | single-end or paired-end |
+
+### Variants calling
+
+Shared by both assays, per sample:
+
+1. Compute read support with **vg pack** (`-Q 5`, i.e. `min_mapq`)
+2. Call variants with **vg call** (`-a`, plus `-z` for DNA-seq only)
+3. Index, merge and tabulate the assay's samples with **bcftools** (`index -f` → `merge` → `query`; skipped for a single sample, which is queried directly into `combined.vcf.tsv.gz`)
+
+Graph-dependent differences:
+
+| | DNA-seq | RNA-seq |
+|---|---|---|
+| Graph for `vg pack` / `vg call` | `<outname>.gbz` | `<outname>_spliced.xg` |
+| Snarls | cactus `<outname>.snarls` | `<outname>_spliced.snarls` (step 5) |
+| `vg call` sample and flags | `-z -a`, `-s` = sample id (`-z` uses the GBZ haplotypes) | `-a` only (`-z` is only valid for a GBZ); `-s` = sample id or `--rna_call_sample` |
+
+Each assay aggregates to its own `combined.vcf.gz` / `combined.vcf.tsv.gz` under `dna/` or `rna/`; see [Outputs](#outputs) for the published files.
 
 ## Inputs
 
