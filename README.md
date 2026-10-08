@@ -174,6 +174,10 @@ This pipeline and its documentation were developed with AI assistance. AI-genera
 | Harness | deepseek-harness + Claude Code |
 
 
+## Citation
+
+Citation for hybseq and for every dependency it runs (Minigraph-Cactus, vg, giraffe, mpmap, bcftools, Nextflow, …) are collected in [`citations.md`](citations.md).
+
 ## License
 
 This project is released under the MIT License. See [`LICENSE`](LICENSE) for the full text.

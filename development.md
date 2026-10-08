@@ -18,6 +18,7 @@ Workflow internals, provenance, design decisions, known limitations, and the smo
 | `assets/` | Placeholder samplesheet and cactus seqfile |
 | `test/` | Synthetic stub-run inputs and `run_smoke.sh` |
 | `nextflow.config` | All params, per-process resources, `docker`/`apptainer`/`test` profiles |
+| `citations.md` | Citation templates for the pipeline and every tool it invokes (authors/publications/DOIs blank) |
 
 ## Workflow architecture
 
