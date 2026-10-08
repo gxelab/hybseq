@@ -28,7 +28,7 @@ Sirén J, Monlong J, Chang X, Novak AM, Eizenga JM, Markello C, Sibbesen JA, Hic
 
 Sibbesen JA, Eizenga JM, Novak AM, Sirén J, Chang X, Garrison E, Paten B. Haplotype-aware pantranscriptome analyses using spliced pangenome graphs. Nat Methods. 2023 Feb;20(2):239-247. doi: 10.1038/s41592-022-01731-9. Epub 2023 Jan 16. PMID: 36646895.
 
-bcftools
+**bcftools**
 
 Danecek P, Bonfield JK, Liddle J, Marshall J, Ohan V, Pollard MO, Whitwham A, Keane T, McCarthy SA, Davies RM, Li H. Twelve years of SAMtools and BCFtools. Gigascience. 2021 Feb 16;10(2):giab008. doi: 10.1093/gigascience/giab008. PMID: 33590861; PMCID: PMC7931819.
 
