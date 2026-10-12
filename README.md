@@ -103,13 +103,21 @@ All settings live in [`nextflow.config`](nextflow.config):
 
 Container images (versions the pipeline is developed and tested against):
 
-- `vg_container` = `quay.io/vgteam/vg:v1.73.0` (vg 1.73)
-- `cactus_container` = `quay.io/biocontainers/cactus:3.1.4` (cactus 3.1.4)
-- `bcftools_container` = `quay.io/biocontainers/bcftools:1.19--h3ea31c5_0` (placeholder tag — pin to whatever is available on your cluster; no particular version is required)
+- `vg_container` = `quay.io/vgteam/vg:v1.73.0` (vg 1.73; publishes amd64 and arm64 images)
+- `cactus_container` = `quay.io/comparative-genomics-toolkit/cactus:v3.1.4` (cactus 3.1.4, the official image: it bundles the `vg` and `odgi` binaries that `cactus-pangenome --giraffe/--chrom-vg/--chrom-og/--viz` invokes)
+- `bcftools_container` = `quay.io/biocontainers/bcftools:1.24--h118bc1c_4` (bcftools 1.24)
+
+Conda environments (`-profile conda`):
+
+- `vg_conda_env` = `bioconda::vg=1.73.0 bioconda::htslib` (htslib supplies the `bgzip` that `vg call | bgzip -c` needs)
+- `cactus_conda_env` = `bioconda::cactus=3.1.4 bioconda::vg=1.73.0 bioconda::odgi` (vg and odgi, as in the cactus image)
+- `bcftools_conda_env` = `bioconda::bcftools=1.24`
 
 **Profiles**
 
 - `docker` — run with Docker images.
+- `podman` — run with Podman. On macOS/Windows a Podman machine must be running (`podman machine start`); on SELinux hosts add `-c 'podman.mountFlags = "Z"'`.
+- `applecontainer` — run with Apple's `container` (macOS 26+, Apple silicon). Start the container service once with `container system start`. The cactus and bcftools images are linux/amd64 only, so on Apple silicon they need Rosetta (`softwareupdate --install-rosetta --agree-to-license` plus the config file below); the vg image is native arm64. Requires Nextflow ≥ 26.04 (the release that added the `appleContainer` scope).
 - `apptainer` — run with Apptainer. Local SIF paths override the registry images:
 
   ```bash
@@ -130,11 +138,14 @@ Container images (versions the pipeline is developed and tested against):
   ```bash
   nextflow run ... -profile apptainer -c apptainer.config
   ```
+- `conda` — run with per-process Conda environments created by **mamba** (`mamba` must be on `PATH`; the environments are cached and reused with `-resume`). Linux hosts only: bioconda publishes no `vg` build for macOS. On a shared filesystem point `conda.cacheDir` (or `NXF_CONDA_CACHEDIR`) at a path every compute node can see; pin or swap packages per run with the `*_conda_env` params.
 - `test` — tiny synthetic inputs for the smoke test (see [development.md](development.md#smoke-test))
 
 Resource note: cactus RAM/time are config defaults (64 GB / 48 h) and should be adjusted to your assemblies. All cactus Toil scratch stays under `--outdir` (`toil_work/`, with the jobstore at `toil_work/js`) and is removed when the cactus task finishes; nothing in `toil_work/` is published.
 
 ## Usage
+
+Requires Nextflow ≥ 26.04 (the vendored `./nextflow` launcher satisfies this — run everything through it rather than a system-installed `nextflow`).
 
 ```bash
 # Full pipeline (reference graph once, then both assays), Docker
@@ -148,6 +159,20 @@ Resource note: cactus RAM/time are config defaults (64 GB / 48 h) and should be 
 ./nextflow run . -profile apptainer \
     --vg_sif /path/to/vg.sif --cactus_sif /path/to/cactus.sif \
     --assemblies assemblies.txt --samplesheet samplesheet.csv --gtf annotation.gtf
+
+# Podman
+./nextflow run . -profile podman --assemblies assemblies.txt --samplesheet samplesheet.csv --gtf annotation.gtf
+
+# Apple container (macOS 26+, Apple silicon; run `container system start` first)
+./nextflow run . -profile applecontainer --assemblies assemblies.txt --samplesheet samplesheet.csv --gtf annotation.gtf
+
+# Apple container on Apple silicon: Rosetta for the linux/amd64 cactus and bcftools images
+printf "appleContainer.runOptions = '--rosetta'\n" > applecontainer.config
+./nextflow run . -profile applecontainer -c applecontainer.config \
+    --assemblies assemblies.txt --samplesheet samplesheet.csv --gtf annotation.gtf
+
+# Conda environments created with mamba (Linux hosts; mamba on PATH)
+./nextflow run . -profile conda --assemblies assemblies.txt --samplesheet samplesheet.csv --gtf annotation.gtf
 ```
 
 ## Outputs

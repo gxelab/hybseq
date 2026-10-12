@@ -5,6 +5,7 @@ process VG_PRUNE {
     tag "$params.outname"
 
     container params.vg_container
+    conda     params.vg_conda_env
 
     input:
     path pg

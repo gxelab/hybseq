@@ -74,9 +74,43 @@ diff "$tmp_out" "$expected"
 rm -f "$tmp_in" "$tmp_out" "$expected"
 pass "rename_gtf_for_vg.sh handles sed-special characters in the sample name"
 
-echo "== 2. config parses =="
+echo "== 2. config parses; profiles resolve and directives stay paired =="
 $NF config . -profile $PROFILE > /dev/null
-pass "nextflow config"
+
+# Each execution profile must resolve to `enabled = true` in its own config scope.
+# This is a config parse only: no container engine is invoked and no Conda
+# environment is created.
+assert_scope_enabled() {
+    local prof="$1" scope="$2" key="$3" out
+    if ! out=$($NF config . -profile "test,$prof" 2>&1); then
+        echo "$out" | tail -20
+        fail "nextflow config -profile test,$prof failed"
+    fi
+    printf '%s\n' "$out" | awk -v s="$scope" -v k="$key" '
+        $0 == s " {" { inb=1; next }
+        inb && $0 == "}" { inb=0 }
+        inb && $0 ~ ("^[[:space:]]*" k " = true$") { found=1 }
+        END { exit found ? 0 : 1 }' \
+        || fail "profile '$prof' does not resolve to $scope.$key = true"
+}
+assert_scope_enabled docker         docker         enabled
+assert_scope_enabled podman         podman         enabled
+assert_scope_enabled applecontainer appleContainer enabled
+assert_scope_enabled apptainer      apptainer      enabled
+assert_scope_enabled conda          conda          enabled
+assert_scope_enabled conda          conda          useMamba
+
+# Every process that declares a container must declare a conda environment too,
+# and RENAME_GTF (host sed) must declare neither.
+mods_with_container=$(grep -rlE '^[[:space:]]*container[[:space:]]' modules/local || true)
+[ -n "$mods_with_container" ] || fail "no module declares a container directive"
+for f in $mods_with_container; do
+    grep -qE '^[[:space:]]*conda[[:space:]]' "$f" || fail "$f declares a container but no conda directive"
+done
+if grep -qE '^[[:space:]]*(container|conda)[[:space:]]' modules/local/reference/rename_gtf.nf; then
+    fail "RENAME_GTF must stay container- and conda-less (host sed)"
+fi
+pass "nextflow config; execution profiles resolve and directives are paired"
 
 echo "== 3. DNA-seq workflow (stub-run) =="
 $NF run . -profile $PROFILE -stub-run --run dnaseq

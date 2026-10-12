@@ -17,7 +17,7 @@ Workflow internals, provenance, design decisions, known limitations, and the smo
 | `bin/rename_gtf_for_vg.sh` | Prefixes every non-comment GTF contig with `<sample>#0#`, whatever the contig naming scheme |
 | `assets/` | Placeholder samplesheet and cactus seqfile |
 | `test/` | Synthetic stub-run inputs and `run_smoke.sh` |
-| `nextflow.config` | All params, per-process resources, `docker`/`apptainer`/`test` profiles |
+| `nextflow.config` | All params, per-process resources, `docker`/`podman`/`applecontainer`/`apptainer`/`conda`/`test` profiles |
 | `citations.md` | Citation templates for the pipeline and every tool it invokes (authors/publications/DOIs blank) |
 
 ## Workflow architecture
@@ -205,14 +205,21 @@ Notes:
 - **Threshold exposure.** The hard-coded `-Q 5` pack filter became `params.min_mapq` (default 5, i.e. the notebook value); thread counts, cactus cores, and `gcsa_tmpdir` are likewise params.
 - **Pass-through flags.** `--permissiveContigFilter`, `--haplo`, `--chrom-vg clip filter`, `--chrom-og full`, and `--viz` are passed to cactus exactly as in the notebook.
 - **`RENAME_GTF` is container-less.** The rename is a single contig-agnostic `sed` substitution; it uses the helper in `bin/` (available on `PATH` in the Nextflow script environment) rather than pulling a container.
+- **Every process declares both a container and a conda environment.** The `container` directive stays as before; a `conda` directive bound to a `params.*_conda_env` entry was added next to it in all 15 container-bearing processes, so `-profile conda` runs the same commands with mamba-created environments. When no container engine is enabled the container directive is ignored and the conda environment is used (that is also why `-stub-run` needs no engine at all). `RENAME_GTF` carries neither directive: it is a host `sed` step.
+- **cactus uses the official toolkit image.** `cactus_container` points at `quay.io/comparative-genomics-toolkit/cactus:v3.1.4`, not at a biocontainers tag: the bioconda/biocontainers cactus package depends on bcftools/bedtools/minigraph/minimap2/samtools/toil but **not** on `vg` or `odgi`, while `cactus_graphmap_join` calls both binaries directly (`cactus_call(['vg', ...])`, `cactus_call(['odgi', ...])`) for the `--giraffe clip filter`, `--gbz/gfa clip filter full`, `--chrom-vg clip filter`, `--chrom-og full` and `--viz` flags the pipeline passes. The official image builds them via `build-tools/downloadPangenomeTools`, and matches the cactus SIF the notebook ran. Version is unchanged (cactus 3.1.4).
+- **bcftools is pinned to 1.24.** The previous default (`quay.io/biocontainers/bcftools:1.19--h3ea31c5_0`) does not exist in the registry, and no `1.19` tag does; the pinned `1.24--h118bc1c_4` is a real biocontainers tag matching the bioconda build. `BCFTOOLS_INDEX/MERGE/QUERY` keep their flags, and the conda spec is pinned to the same version.
+- **The vg Conda environment carries htslib.** bioconda's `vg` package ships only the prebuilt `vg` binary (no dependencies), but `VG_CALL` pipes `vg call` into `bgzip -c`; `bioconda::htslib` supplies `bgzip`. The conda environment therefore mirrors what the vgteam image provides for this step. The cactus environment likewise adds `vg` and `odgi` for the cactus flags above.
 - **`vg call -z` is DNA-only.** S06 L56 copies `-z` from the DNA command, but `-z` restricts calling to the GBZ haplotypes and `vg call` rejects it for a non-GBZ graph, so `VG_CALL` passes it only when the graph is the GBZ (`graph_is_gbz`); the RNA (`-a` only) and DNA (`-z -a`) flag sets are otherwise unchanged from the notebooks.
 - **RNA cross-sample merge (requested extension).** S06 stops at a per-sample `bcftools query`; at the user's request the RNA VCFs are now indexed, merged and queried per assay exactly like the DNA ones, using the shared modules, so the pipeline produces `rna/combined.vcf.gz` and `rna/combined.vcf.tsv.gz` instead of per-sample TSVs. There is no notebook source for this step (see provenance).
 
 ## Known limitations
 
-- `vg call | bgzip -c` requires `bgzip` inside the vg image. vgteam images ship htslib tools; verify at the first real run or override `--vg_container`.
-- `--viz` is passed to `cactus-pangenome` as is; the cactus image must provide its dependencies (graphviz/odgi).
-- `bcftools_container` uses a placeholder tag (`1.19--h3ea31c5_0`). Pin it to a tag available on your cluster; no particular version is required.
+- `vg call | bgzip -c` requires `bgzip` inside the vg image. vgteam images ship htslib tools; the conda profile adds `htslib` to the vg environment for the same reason. Verify at the first real run or override `--vg_container`.
+- `--viz` is passed to `cactus-pangenome` as is; the cactus image must provide its dependencies (vg/odgi — the official toolkit image does).
+- cactus and bcftools are published as linux/amd64 images only, while vg publishes amd64 and arm64. Apple silicon hosts therefore need Rosetta under Apple container (`appleContainer.runOptions = '--rosetta'` plus `softwareupdate --install-rosetta --agree-to-license`); a Podman machine on Apple silicon runs amd64 images under its own emulation. Apple container also needs macOS 26+ and a started service (`container system start`).
+- The `conda` profile is Linux-only: bioconda publishes no `vg` build for macOS (`cactus` has an osx-64 build, `vg` does not), so the environment cannot be created on a Mac. It also requires `mamba` on `PATH` (mamba 2.x is fine) — `conda.useMamba = true` calls `mamba`, not `conda`. The first run creates three environments (the cactus one is large) and `conda.createTimeout` is raised to 1 h for that reason; `-resume` reuses them, and `conda.cacheDir`/`NXF_CONDA_CACHEDIR` moves the cache onto a shared filesystem.
+- Engine selection is exclusive per run: if a container engine profile and `conda` are enabled together (`-profile docker,conda`), the container wins for every task that declares an image, and the conda environments are not used.
+- The container images and the conda environments added here were **not** pulled or created in this repository (the smoke test is stub-only): the `podman`, `applecontainer` and `conda` profiles are verified by config resolution and the directive contract, not by a real run.
 - Cactus resources are estimates (64 GB RAM / 48 h per process) and must be tuned to the assemblies; all other processes default to 1 CPU, 8 GB, 8 h, with per-process overrides in `nextflow.config`.
 - `publish_dir_mode` defaults to `copy`, which will copy large GAM/pack files. `symlink` is recommended for real runs.
 - `CACTUS_PANGENOME` deletes `<outdir>/toil_work` only when it succeeds. A failed or interrupted cactus run leaves the Toil jobstore behind, and rerunning into the same `--outdir` will hand Toil an existing jobstore; remove `<outdir>/toil_work` manually before such a rerun.
@@ -228,14 +235,14 @@ Notes:
 bash test/run_smoke.sh
 ```
 
-Requirements: the vendored Nextflow launcher at `./nextflow` and Nextflow ≥ 24.10. Everything runs with `-stub-run` — process stubs only, no containers, **no biological results are produced**; this is a connectivity/syntax test.
+Requirements: the vendored Nextflow launcher at `./nextflow` and Nextflow ≥ 26.04 (the release that added the `appleContainer` config scope; the vendored launcher pins `NXF_VER=26.04.6`). Everything runs with `-stub-run` — process stubs only, no containers, no Conda environments, **no biological results are produced**; this is a connectivity/syntax test.
 
 Inputs are tiny synthetic files with neutral names (`ref_a`/`ref_b`, `dna_a`/`dna_b`/`dna_hybrid`/`dna_c`, `rna_a`/`rna_b`) covering all four assay/layout combinations. The script rewrites `test/assemblies.txt` with absolute paths (the content is not read under `-stub-run`) and removes `work/` and `test/results/` before and after the run (`trap clean EXIT`).
 
 Steps:
 
 1. **bin script unit check** — `bash -n bin/rename_gtf_for_vg.sh`, then run it on `test/data/ref_a.gtf` and `diff` the result against `test/data/expected_ref_a.gtf` (regression guard for the `NC_`/`NW_` case → `ref_a#0#`), plus inline cases asserting that any contig name (`scaffold_b1`, `chr1`, `CM012345.1`, `1`) is prefixed, that comment/blank/non-tab lines pass through unchanged, and that sed-special characters in the sample name are emitted literally.
-2. **Config parse** — `./nextflow config . -profile test`.
+2. **Config parse, profiles, directive contract** — `./nextflow config . -profile test`, then for each of `docker`, `podman`, `applecontainer`, `apptainer` and `conda`: `./nextflow config . -profile test,<profile>` must resolve that profile's config scope to `enabled = true` (plus `conda.useMamba` for conda). The same step checks the directive contract: every `modules/local/**` file carrying a `container` directive must carry a `conda` directive too, and `RENAME_GTF` must carry neither. Config parsing only — no engine is invoked, no image is pulled and no Conda environment is created.
 3. **`--run dnaseq`** — asserts `ref/test.gbz`, `.dist`, `.dist.bak`, `.shortread.withzip.min`, `.shortread.zipcodes`, `.snarls`, `.log`, `dna/combined.vcf.gz`, `dna/combined.vcf.tsv.gz`, and `dna/<sample>.{gam,gam.log,pack,vcf.gz,vcf.gz.csi}` for `dna_a`, `dna_b`, `dna_hybrid`, `dna_c`; also asserts that no `*.dist2` is published (intermediate), that `results/rna` is **not** created, and that the retired `results/gfa` and `results/gam` directories do not exist.
 4. **`--run rnaseq`** — asserts `ref/ref_a.gtf`, `ref/test_spliced.{pg,xg,gcsa,gcsa.lcp,snarls,dist}`, `rna/combined.vcf.gz`, `rna/combined.vcf.tsv.gz` and `rna/<sample>.{gam,pack,vcf.gz,vcf.gz.csi}` for `rna_a`, `rna_b`; asserts no per-sample `rna/<sample>.vcf.tsv.gz` is published (retired), no `*pruned.pg*` is published (ephemeral intermediate), that `results/dna` is **not** created, and that the retired `results/gfa` and `results/gam` directories do not exist.
 5. **Default entry (`both`)** — one run with `-with-dag`, asserting both DNA and RNA outputs exist, the DAG file is non-empty, and `CACTUS_PANGENOME` appears exactly once in the DAG (single shared reference).
@@ -249,6 +256,9 @@ Success ends with `ALL SMOKE TESTS PASSED`.
 See the Usage section of [`README.md`](README.md) for command lines. Additional practical notes:
 
 - **Apptainer.** Pass local SIFs via `--vg_sif`, `--cactus_sif`, `--bcftools_sif`; they override the registry images. `apptainer.autoMounts = true` is set, so bind-mount data directories the same way you would with `apptainer exec`, e.g. `-c 'apptainer.runOptions = "--bind /nfs_data"'`.
+- **Podman.** Start the machine first on macOS/Windows (`podman machine init` once, then `podman machine start`). On SELinux hosts add `podman.mountFlags = 'Z'`; extra bind mounts go through `podman.runOptions` (e.g. `-c 'podman.runOptions = "--volume /data:/data"'`).
+- **Apple container.** `container system start` once, then run with `-profile applecontainer`. On Apple silicon the cactus and bcftools images are linux/amd64: install Rosetta and pass `-c` a config file containing `appleContainer.runOptions = '--rosetta'` (harmless for the arm64 vg image). Private registries need `container registry login` first; `appleContainer.registry` selects a non-default registry.
+- **Conda.** `mamba` must be on `PATH`; the three environments are created on first use under `conda.cacheDir` (default: the Nextflow cache directory, `NXF_CONDA_CACHEDIR` overrides it). Pin or swap packages per run with `--vg_conda_env`, `--cactus_conda_env`, `--bcftools_conda_env`, e.g. `--vg_conda_env 'bioconda::vg=1.73.0 bioconda::htslib=1.19'`.
 - **Resources.** Raise `cactus_cons_cores` / `cactus_index_cores` / `cactus_mg_cores` / `cactus_map_cores` and the `CACTUS_PANGENOME` memory/time to match the assemblies.
 - **Publishing.** Use `--publish_dir_mode symlink` when GAM and pack files are large.
 - **Naming.** `--ref_name` must match the reference name in the seqfile; `--outname` prefixes every graph artifact.

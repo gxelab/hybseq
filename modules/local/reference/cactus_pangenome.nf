@@ -10,6 +10,7 @@ process CACTUS_PANGENOME {
     tag "$params.outname"
 
     container params.cactus_container
+    conda     params.cactus_conda_env
 
     publishDir "${params.outdir}", mode: params.publish_dir_mode
 
