@@ -262,7 +262,3 @@ See the Usage section of [`README.md`](README.md) for command lines. Additional 
 - **Resources.** Raise `cactus_cons_cores` / `cactus_index_cores` / `cactus_mg_cores` / `cactus_map_cores` and the `CACTUS_PANGENOME` memory/time to match the assemblies.
 - **Publishing.** Use `--publish_dir_mode symlink` when GAM and pack files are large.
 - **Naming.** `--ref_name` must match the reference name in the seqfile; `--outname` prefixes every graph artifact.
-
-## Open items
-
-- Long-read RNA-seq (S07) is an empty notebook stub and has no implementation.

@@ -9,11 +9,6 @@ Conventions and rules for AI coding agents working in this repository. See [`REA
 - `workflows/reference.nf` builds the graph once, then `workflows/dnaseq.nf` and `workflows/rnaseq.nf` consume it. Keep them separate; never fold the two assays into one workflow.
 - `bin/rename_gtf_for_vg.sh` is a pipeline helper called by the `RENAME_GTF` process; keep it in `bin/` and keep `test/data/expected_ref_a.gtf` in sync if you change it.
 
-## Source of truth
-
-- `notebooks/S05_pangenome_poolseq.qmd` and `notebooks/S06_pangenome_rnaseq.qmd` record the real in-house workflows and are the source of truth. Translate them faithfully; never edit the notebooks.
-- Do not modernize tools, flags, thresholds, or versions (vg 1.73, cactus 3.1.4) unless explicitly asked; `S07_pangenome_lrs.qmd` is empty and long-read support is not implemented.
-
 ## Documentation ownership
 
 - `README.md` is user-facing only: intro, usage, inputs, samplesheet, configuration, outputs, AI-assistance declaration, license. Keep architecture, rationale, limitations, and test notes out of it.
