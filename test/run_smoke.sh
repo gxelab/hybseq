@@ -19,9 +19,9 @@ NF=./nextflow
 PROFILE=test
 RESULTS=test/results
 
-# Rewrite the cactus seqfile with absolute paths so a (hypothetical) real cactus run
-# would also resolve them; the content is not read under -stub-run.
-printf 'ref_a\t%s/test/data/ref_a.fa\nref_b\t%s/test/data/ref_b.fa\n' "$REPO_ROOT" "$REPO_ROOT" > test/assemblies.txt
+# test/assemblies.txt is committed with repo-relative paths and is left alone here:
+# under -stub-run its content is never read, and a real cactus run would need paths
+# that resolve from the process work directory anyway.
 
 clean() {
     rm -rf work "$RESULTS"

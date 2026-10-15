@@ -267,7 +267,7 @@ READS=500 bash test/run_smoke.sh      # smaller inputs, quicker run
 
 Requirements: the vendored Nextflow launcher at `./nextflow` (it pins `NXF_VER=26.04.6`) and `python3` (standard library only) to generate the reads. Everything runs with `-stub-run` — process stubs only, no containers, **no biological results are produced**; this is a connectivity/syntax test.
 
-Inputs are the generated reads described under [Test data](#test-data), with neutral names (`ref_a`/`ref_b`, `dna_a`/`dna_b`/`dna_hybrid`/`dna_c`, `rna_a`/`rna_b`) covering all four assay/layout combinations. The script rewrites `test/assemblies.txt` with absolute paths (the content is not read under `-stub-run`) and removes `work/` and `test/results/` before and after the run (`trap clean EXIT`); the generated reads are inputs and are left in place.
+Inputs are the generated reads described under [Test data](#test-data), with neutral names (`ref_a`/`ref_b`, `dna_a`/`dna_b`/`dna_hybrid`/`dna_c`, `rna_a`/`rna_b`) covering all four assay/layout combinations. The seqfile `test/assemblies.txt` is committed with repo-relative paths and is left untouched (its content is never read under `-stub-run`); the script removes `work/` and `test/results/` before and after the run (`trap clean EXIT`), and the generated reads are inputs and are left in place.
 
 Steps:
 
