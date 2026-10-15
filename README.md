@@ -129,7 +129,7 @@ Container images (versions the pipeline is developed and tested against):
   ```bash
   nextflow run ... -profile apptainer -c apptainer.config
   ```
-- `test` — tiny synthetic inputs for the smoke test (see [development.md](development.md#smoke-test))
+- `test` — small inputs simulated from real *Drosophila* chromosome 4 assemblies for the smoke test; generate them first with `python3 test/simulate_reads.py` (`test/run_smoke.sh` does that automatically). See [development.md](development.md#smoke-test)
 - `docker` — run with Docker images. (experimental)
 - `podman` — run with Podman. (experimental)
 

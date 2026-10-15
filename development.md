@@ -16,7 +16,7 @@ Workflow internals, provenance, design decisions, known limitations, and the smo
 | `modules/local/rnaseq/` | `VG_MPMAP` (per-sample RNA mapping) |
 | `bin/rename_gtf_for_vg.sh` | Prefixes every non-comment GTF contig with `<sample>#0#`, whatever the contig naming scheme |
 | `assets/` | Placeholder samplesheet and cactus seqfile |
-| `test/` | Synthetic stub-run inputs and `run_smoke.sh` |
+| `test/` | Stub-run inputs for `run_smoke.sh`: committed chr4 references and `samplesheet.csv`, plus `simulate_reads.py`, which generates the reads (`test/data/fastq/`, gitignored) from them |
 | `nextflow.config` | All params, per-process resources, `docker`/`podman`/`apptainer`/`test` profiles |
 | `citations.md` | Citation templates for the pipeline and every tool it invokes (authors/publications/DOIs blank) |
 
@@ -227,21 +227,51 @@ Notes:
 - `RENAME_GTF` runs on the host with `sed`, so `bin/` must be reachable on `PATH`. It assumes a tab-delimited GTF: lines without a tab are passed through unprefixed rather than guessed at.
 - RNA and DNA are merged separately, one `combined.vcf.gz`/`combined.vcf.tsv.gz` per assay: there is no cross-assay merge, and cross-assay comparison stays downstream.
 - `--rna_call_sample` sets a single fixed `vg call -s` for every RNA sample, so with more than one RNA sample the per-sample VCFs share a sample column and `bcftools merge` fails on duplicate sample names. Leave it unset (the default: sample id) unless the run has a single RNA sample.
-- No biological validation is automated in this repository: the smoke test is stub-only, and real-data correctness is established by the notebook comparisons (e.g. S05's grenedalf cross-check), not by CI.
+- No biological validation is automated in this repository: the smoke test is stub-only, its reads are simulated from the references (see [Test data](#test-data)), and real-data correctness is established by the notebook comparisons (e.g. S05's grenedalf cross-check), not by CI.
 - The `test` profile's `withName` overrides exist because profile-level params do not propagate into the base `process` block; keep them in sync when adding processes.
+
+## Test data
+
+The references are real data: `ref_a.fa` is *Drosophila melanogaster* chromosome 4 (GCF_000001215.4, 1,348,131 bp), `ref_b.fa` is *Drosophila simulans* w501 chromosome 4 (Prin_Dsim_3.1, 1,146,867 bp), `ref_a.gtf` is the FlyBase r6.54 chromosome-4 annotation and `expected_ref_a.gtf` is that annotation after `rename_gtf_for_vg.sh`.
+
+The reads are **not committed** — `test/simulate_reads.py` simulates them from those references, so they cannot drift away from them the way hand-written placeholder reads did. Run it after any change to `ref_a.fa`, `ref_b.fa` or `ref_a.gtf`:
+
+```bash
+python3 test/simulate_reads.py                  # 5000 read pairs per sample (default)
+python3 test/simulate_reads.py --reads 1000     # quicker, lower coverage
+python3 test/simulate_reads.py --check          # verify the fastq against the references
+```
+
+| Sample | Assay | Layout | Simulated from |
+|---|---|---|---|
+| `dna_a` | dnaseq | paired-end | `ref_a` |
+| `dna_b` | dnaseq | paired-end | `ref_b` |
+| `dna_hybrid` | dnaseq | paired-end | `ref_a` 50% + `ref_b` 50% |
+| `dna_c` | dnaseq | single-end | `ref_a` 50% + `ref_b` 50% |
+| `rna_a` | rnaseq | single-end | `ref_a` spliced transcripts |
+| `rna_b` | rnaseq | paired-end | `ref_a` spliced transcripts |
+
+- **`--reads`** (default 5,000) is read pairs per paired-end sample and reads per single-end sample. At the default that is about 1.1x coverage of `ref_a` for `dna_a`, 1.3x of `ref_b` for `dna_b`, and half of that per haplotype for the two 50:50 samples; it is the only scale knob.
+- 150 bp reads, per-base error rate 0.5% (transition-biased substitutions), quality Q40 with error bases at Q20, DNA inserts 350 ± 50 bp and RNA inserts 300 ± 50 bp, both truncated at 3 SD because libraries are size-selected. The seed is fixed, so a given reference set and `--reads` always produce the same reads.
+- DNA fragments are drawn from either strand anywhere in a contig except the 17 kb `N` gap at 1,200,663–1,217,662 of `ref_a`. RNA fragments are drawn from spliced transcript sequences, so some reads span exon-exon junctions. The GTF has no `ref_b` counterpart, which is why both RNA samples come from `ref_a` and differ in layout alone.
+- Paired mates share a read name (`<sample>_<i>/1` and `/2`) so name-based pairing works, and `--check` verifies it.
+- `--check` re-reads the fastq and confirms the record counts, the mate pairing, the read length, that every sampled read matches its intended source (and, for the mixed samples, that both sources appear), and that sampled pairs sit one insert length apart on one strand. It is the only data-level check available without `vg` or containers; it does not need an index and takes a few seconds.
+- `test/samplesheet.csv` and `test/assemblies.txt` still point at the same file names, so nothing else changed when the reads became generated.
 
 ## Smoke test
 
 ```bash
 bash test/run_smoke.sh
+READS=500 bash test/run_smoke.sh      # smaller inputs, quicker run
 ```
 
-Requirements: the vendored Nextflow launcher at `./nextflow` (it pins `NXF_VER=26.04.6`). Everything runs with `-stub-run` — process stubs only, no containers, **no biological results are produced**; this is a connectivity/syntax test.
+Requirements: the vendored Nextflow launcher at `./nextflow` (it pins `NXF_VER=26.04.6`) and `python3` (standard library only) to generate the reads. Everything runs with `-stub-run` — process stubs only, no containers, **no biological results are produced**; this is a connectivity/syntax test.
 
-Inputs are tiny synthetic files with neutral names (`ref_a`/`ref_b`, `dna_a`/`dna_b`/`dna_hybrid`/`dna_c`, `rna_a`/`rna_b`) covering all four assay/layout combinations. The script rewrites `test/assemblies.txt` with absolute paths (the content is not read under `-stub-run`) and removes `work/` and `test/results/` before and after the run (`trap clean EXIT`).
+Inputs are the generated reads described under [Test data](#test-data), with neutral names (`ref_a`/`ref_b`, `dna_a`/`dna_b`/`dna_hybrid`/`dna_c`, `rna_a`/`rna_b`) covering all four assay/layout combinations. The script rewrites `test/assemblies.txt` with absolute paths (the content is not read under `-stub-run`) and removes `work/` and `test/results/` before and after the run (`trap clean EXIT`); the generated reads are inputs and are left in place.
 
 Steps:
 
+0. **Test data** — `python3 test/simulate_reads.py --reads "$READS"`, then the same script with `--check`. Fails fast if `python3` is missing, so a fresh clone never runs against absent reads. A `READS=<n>` run leaves the smaller fastq behind; the next plain run regenerates them at 5,000.
 1. **bin script unit check** — `bash -n bin/rename_gtf_for_vg.sh`, then run it on `test/data/ref_a.gtf` and `diff` the result against `test/data/expected_ref_a.gtf` (regression guard for the `NC_`/`NW_` case → `ref_a#0#`), plus inline cases asserting that any contig name (`scaffold_b1`, `chr1`, `CM012345.1`, `1`) is prefixed, that comment/blank/non-tab lines pass through unchanged, and that sed-special characters in the sample name are emitted literally.
 2. **Config parse, profiles, directive contract** — `./nextflow config . -profile test`, then for each of `docker`, `podman` and `apptainer`: `./nextflow config . -profile test,<profile>` must resolve that profile's config scope to `enabled = true`. The same step checks the directive contract: every `modules/local/**` file carrying a `container` directive is wired to an image, no module declares a `conda` directive, `RENAME_GTF` declares neither, and the retired `applecontainer` and `conda` profiles must not resolve. Config parsing only — no engine is invoked and no image is pulled.
 3. **`--run dnaseq`** — asserts `ref/test.gbz`, `.dist`, `.dist.bak`, `.shortread.withzip.min`, `.shortread.zipcodes`, `.snarls`, `.log`, `dna/combined.vcf.gz`, `dna/combined.vcf.tsv.gz`, and `dna/<sample>.{gam,gam.log,pack,vcf.gz,vcf.gz.csi}` for `dna_a`, `dna_b`, `dna_hybrid`, `dna_c`; also asserts that no `*.dist2` is published (intermediate), that `results/rna` is **not** created, and that the retired `results/gfa` and `results/gam` directories do not exist.

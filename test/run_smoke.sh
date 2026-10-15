@@ -2,12 +2,14 @@
 # Smoke test for the hybseq pipeline.
 #
 # Validates pipeline syntax, channel wiring, module I/O contracts and the bin script
-# with tiny synthetic inputs (neutral names). Everything runs with -stub-run (process
-# stubs), so no containers or real tools are needed and NO biological results are
-# produced -- this is a connectivity/syntax test, not a data analysis. Real-data
-# validation is documented in development.md.
+# with small inputs simulated from the committed references (neutral names). The
+# reads are generated first (test/simulate_reads.py) because they are not committed.
+# Everything then runs with -stub-run (process stubs), so no containers or real tools
+# are needed and NO biological results are produced -- this is a connectivity/syntax
+# test, not a data analysis. Real-data validation is documented in development.md.
 #
 # Usage: bash test/run_smoke.sh
+#        READS=500 bash test/run_smoke.sh    # smaller inputs, quicker run
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -29,6 +31,17 @@ trap clean EXIT
 
 pass() { echo "  [ok] $1"; }
 fail() { echo "  [FAIL] $1" >&2; exit 1; }
+
+echo "== 0. test data: generate the reads from the committed references =="
+# test/data/fastq/ is generated, not committed: the reads are simulated from
+# test/data/ref_a.fa, ref_b.fa and ref_a.gtf, so a reference change can never
+# leave stale reads behind. Re-run this step alone with:
+#     python3 test/simulate_reads.py --reads N
+READS=${READS:-5000}
+command -v python3 >/dev/null 2>&1 || fail "python3 is required to generate the test reads"
+python3 test/simulate_reads.py --reads "$READS"
+python3 test/simulate_reads.py --check --reads "$READS"
+pass "reads generated from ref_a/ref_b/ref_a.gtf and verified against them"
 
 echo "== 1. bin script: syntax + unit check =="
 bash -n bin/rename_gtf_for_vg.sh

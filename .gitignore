@@ -12,3 +12,8 @@ test/results/
 nextflow
 *.svg
 *.dot
+
+# Generated test reads (test/simulate_reads.py builds them from the committed
+# references in test/data/, so they are never committed)
+test/data/fastq/
+__pycache__/

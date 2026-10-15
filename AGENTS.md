@@ -29,9 +29,10 @@ Conventions and rules for AI coding agents working in this repository. See [`REA
 
 ## Testing and safety
 
-- Verify changes with `bash test/run_smoke.sh` (synthetic inputs, `-profile test -stub-run`, no containers). It checks connectivity, never biology.
+- Verify changes with `bash test/run_smoke.sh` (reads generated from the committed chr4 references, `-profile test -stub-run`, no containers). It checks connectivity, never biology.
+- `test/data/fastq/` is generated and gitignored, never commit it: regenerate with `python3 test/simulate_reads.py` (add `--reads N` for a different scale, default 5,000 pairs per sample) whenever `test/data/ref_a.fa`, `ref_b.fa` or `ref_a.gtf` changes, then confirm with `python3 test/simulate_reads.py --check`.
 - Never launch a real cactus/vg analysis, pull containers, or run without `-stub-run`; the default `--outdir` is `${launchDir}/results` and can be huge.
-- Do not modify files outside this repository, and do not delete fixtures under `test/data/` or helper scripts under `bin/`.
+- Do not modify files outside this repository, and do not delete the committed fixtures under `test/data/` or helper scripts under `bin/`.
 - Do not commit or push; leave the working tree for the user to review.
 
 ## Style
