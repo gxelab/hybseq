@@ -9,7 +9,6 @@ process BCFTOOLS_INDEX {
     tag "$sample"
 
     container params.bcftools_container
-    conda     params.bcftools_conda_env
 
     publishDir [path: { "${params.outdir}/${assay_dir}" }, pattern: '*.csi', mode: params.publish_dir_mode]
 

@@ -9,7 +9,6 @@ process VG_GIRAFFE {
     tag "$sample"
 
     container params.vg_container
-    conda     params.vg_conda_env
 
     publishDir "${params.outdir}", mode: params.publish_dir_mode
 

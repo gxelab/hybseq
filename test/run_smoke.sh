@@ -95,22 +95,30 @@ assert_scope_enabled() {
 }
 assert_scope_enabled docker         docker         enabled
 assert_scope_enabled podman         podman         enabled
-assert_scope_enabled applecontainer appleContainer enabled
 assert_scope_enabled apptainer      apptainer      enabled
-assert_scope_enabled conda          conda          enabled
-assert_scope_enabled conda          conda          useMamba
 
-# Every process that declares a container must declare a conda environment too,
-# and RENAME_GTF (host sed) must declare neither.
+# Retired execution paths must not reappear: cactus needs an AVX2-capable x86-64
+# CPU (no macOS emulation provides it) and bioconda's cactus is not usable for
+# this pipeline, so the applecontainer and conda profiles were removed. An
+# unknown profile name makes `nextflow config` exit non-zero, so this asserts
+# both that they are gone and that they stay gone.
+for retired in applecontainer conda; do
+    if $NF config . -profile "test,$retired" >/dev/null 2>&1; then
+        fail "retired profile '$retired' still resolves"
+    fi
+done
+
+# Every tool-running process declares a container image; there is no conda
+# fallback, and RENAME_GTF (host sed) declares neither directive.
 mods_with_container=$(grep -rlE '^[[:space:]]*container[[:space:]]' modules/local || true)
 [ -n "$mods_with_container" ] || fail "no module declares a container directive"
-for f in $mods_with_container; do
-    grep -qE '^[[:space:]]*conda[[:space:]]' "$f" || fail "$f declares a container but no conda directive"
-done
 if grep -qE '^[[:space:]]*(container|conda)[[:space:]]' modules/local/reference/rename_gtf.nf; then
-    fail "RENAME_GTF must stay container- and conda-less (host sed)"
+    fail "RENAME_GTF must stay container-less (host sed)"
 fi
-pass "nextflow config; execution profiles resolve and directives are paired"
+if grep -rqE '^[[:space:]]*conda[[:space:]]' modules/local; then
+    fail "conda directives are retired; containers are the only execution path"
+fi
+pass "nextflow config; execution profiles resolve and the directive contract holds"
 
 echo "== 3. DNA-seq workflow (stub-run) =="
 $NF run . -profile $PROFILE -stub-run --run dnaseq

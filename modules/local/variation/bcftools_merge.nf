@@ -6,7 +6,6 @@ process BCFTOOLS_MERGE {
     tag "${assay_dir}/combined"
 
     container params.bcftools_container
-    conda     params.bcftools_conda_env
 
     publishDir "${params.outdir}", mode: params.publish_dir_mode
 
