@@ -2,8 +2,14 @@
 // Runs as a managed foreground task; --logFile is written inside --outDir so the
 // published layout under results/ref/ is uniform.
 // The Toil jobstore is the first positional argument: it is kept with the rest of
-// the Toil scratch under ${params.outdir}/toil_work, which the task removes on
-// success (nothing in toil_work is published).
+// the Toil scratch under ${params.outdir}/toil_work, which is never published.
+// The scratch is deleted before the jobstore is created, because Toil refuses to
+// reuse an existing jobstore: that pre-clean is what makes a rerun into an
+// --outdir whose previous attempt failed or was killed work without manual
+// cleanup. It is then removed again by an EXIT trap, so a failed cactus leaves no
+// scratch behind either. The trap (not a trailing `rm`) is required because the
+// script runs under `set -e`; it preserves the exit status, so the task still
+// fails as it should.
 // The cactus-produced distance index is archived as <outname>.dist.bak; the
 // primary <outname>.dist is replaced by the index VG_INDEX_DIST_UPDATE rebuilds.
 process CACTUS_PANGENOME {
@@ -29,9 +35,12 @@ process CACTUS_PANGENOME {
     script:
     def toilWorkDir = "${params.outdir}/toil_work"
     """
-    mkdir -p ${toilWorkDir}
     mkdir -p ref
-    cactus-pangenome ${toilWorkDir}/js ${assemblies} \\
+    rm -rf "${toilWorkDir}"
+    mkdir -p "${toilWorkDir}"
+    trap 'rm -rf "${toilWorkDir}"' EXIT
+
+    cactus-pangenome "${toilWorkDir}/js" "${assemblies}" \\
         --outDir ref \\
         --outName ${params.outname} \\
         --reference ${params.ref_name} \\
@@ -54,8 +63,6 @@ process CACTUS_PANGENOME {
     gunzip -c ref/${params.outname}.gfa.gz > ref/${params.outname}.gfa
     gunzip -c ref/${params.outname}.vcf.gz > ref/${params.outname}.vcf
     mv ref/${params.outname}.dist ref/${params.outname}.dist.bak
-
-    rm -rf ${toilWorkDir}
     """
 
     stub:

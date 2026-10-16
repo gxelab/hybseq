@@ -169,7 +169,7 @@ Container images (versions the pipeline is developed and tested against):
 
 **Platform.** Cactus needs an x86-64 CPU with AVX2, so the reference workflow runs only on x86-64 Linux hosts (or a VM that provides AVX2); macOS hosts are limited to `-stub-run` smoke tests. Earlier releases shipped `applecontainer` and `conda` profiles — both were removed: Apple-silicon emulation provides no AVX2, and bioconda's cactus is not usable for this pipeline.
 
-Resource note: cactus RAM/time are config defaults (64 GB / 48 h) and should be adjusted to your assemblies. All cactus Toil scratch stays under `--outdir` (`toil_work/`, with the jobstore at `toil_work/js`) and is removed when the cactus task finishes; nothing in `toil_work/` is published.
+Resource note: cactus RAM/time are config defaults (64 GB / 48 h) and should be adjusted to your assemblies. All cactus Toil scratch stays under `--outdir` (`toil_work/`, with the jobstore at `toil_work/js`) and the cactus task removes it again — on failure as well as on success. Scratch left behind by a run that was killed outright is deleted at the start of the next attempt, so rerunning into the same `--outdir` needs no manual cleanup. Nothing in `toil_work/` is published.
 
 ## Usage
 

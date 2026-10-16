@@ -7,6 +7,9 @@
 # Everything then runs with -stub-run (process stubs), so no containers or real tools
 # are needed and NO biological results are produced -- this is a connectivity/syntax
 # test, not a data analysis. Real-data validation is documented in development.md.
+# Exception: step 8 runs the real CACTUS_PANGENOME script body with a fake
+# cactus-pangenome on PATH (still no container and no cactus) to check the Toil
+# scratch cleanup, which a stub cannot exercise.
 #
 # Usage: bash test/run_smoke.sh
 #        READS=500 bash test/run_smoke.sh    # smaller inputs, quicker run
@@ -259,5 +262,45 @@ echo "$out" | grep -q "fastq_1 missing" || fail "missing fastq_1: error message 
 clean
 rm -f "$tmp_ss"
 pass "negative tests"
+
+echo "== 8. cactus Toil scratch: pre-clean + removal on failure (fake cactus) =="
+# Runs the real CACTUS_PANGENOME script body with a fake cactus-pangenome on PATH.
+# The fake mimics Toil: it refuses to reuse an existing jobstore, then creates one
+# and exits 1 like a cactus error. No container engine is enabled, so Nextflow
+# ignores the container directive and resolves the tool from PATH.
+fakebin=$(mktemp -d)
+cat > "$fakebin/cactus-pangenome" <<'FAKE'
+#!/usr/bin/env bash
+set -euo pipefail
+jobstore="$1"
+if [ -e "$jobstore" ]; then
+    echo "FAKE cactus-pangenome: job store already exists: $jobstore" >&2
+    exit 1
+fi
+mkdir -p "$jobstore/files"
+echo "FAKE cactus-pangenome: fresh job store: $jobstore" >&2
+exit 1
+FAKE
+chmod +x "$fakebin/cactus-pangenome"
+
+# Scratch left behind by a hypothetical previous failure.
+mkdir -p "$RESULTS/toil_work/js"
+touch "$RESULTS/toil_work/js/stale"
+
+if PATH="$fakebin:$PATH" $NF run . -profile $PROFILE --run dnaseq >/dev/null 2>&1; then
+    fail "fake cactus-pangenome (exit 1) did not fail the run"
+fi
+# Assert on the task's own .command.err: Nextflow keeps it for a failed task, and
+# it is independent of how the run's error report is formatted.
+grep -rqs "FAKE cactus-pangenome: fresh job store" work/ \
+    || fail "stale toil_work reached cactus: scratch was not cleared before the jobstore"
+if grep -rqs "job store already exists" work/; then
+    fail "stale Toil jobstore was handed to cactus"
+fi
+[ ! -e "$RESULTS/toil_work" ] \
+    || fail "toil_work left behind after a failed cactus (cleanup on failure missing)"
+rm -rf "$fakebin"
+clean
+pass "cactus clears stale Toil scratch first and removes it when the task fails"
 
 echo "ALL SMOKE TESTS PASSED"

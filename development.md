@@ -46,7 +46,10 @@ Each workflow filters `samples` by assay and errors out with `No dnaseq/rnaseq s
 `CACTUS_PANGENOME` runs `cactus-pangenome` as a managed foreground task:
 
 ```bash
+mkdir -p ref
+rm -rf <outdir>/toil_work       # stale Toil scratch from a failed/killed attempt
 mkdir -p <outdir>/toil_work
+trap 'rm -rf <outdir>/toil_work' EXIT
 cactus-pangenome <outdir>/toil_work/js <assemblies> \
     --outDir ref --outName <outname> --reference <ref_name> \
     --giraffe clip filter --gbz clip filter full --gfa clip filter full --vcf \
@@ -56,10 +59,9 @@ cactus-pangenome <outdir>/toil_work/js <assemblies> \
 gunzip -c ref/<outname>.gfa.gz > ref/<outname>.gfa
 gunzip -c ref/<outname>.vcf.gz > ref/<outname>.vcf
 mv ref/<outname>.dist ref/<outname>.dist.bak
-rm -rf <outdir>/toil_work
 ```
 
-The Toil jobstore is the first positional argument and lives at `<outdir>/toil_work/js`, so all Toil scratch stays under `--outdir`; the task removes `toil_work/` when it finishes. Nothing in `toil_work/` is published. The distance index cactus produced is archived as `<outname>.dist.bak` inside the task, so `CACTUS_PANGENOME` publishes no file named `<outname>.dist` (which avoids racing the promoted index, see below).
+The Toil jobstore is the first positional argument and lives at `<outdir>/toil_work/js`, so all Toil scratch stays under `--outdir`. Nothing in `toil_work/` is published, and the task owns the scratch completely: it deletes `toil_work/` *before* creating the jobstore, because Toil refuses to reuse an existing jobstore, and that pre-clean is what makes a rerun into a failed or killed `--outdir` work without manual cleanup. It then removes `toil_work/` from an `EXIT` trap, so a failed cactus leaves no scratch behind either — a trailing `rm` could not do that, since Nextflow runs the script with `set -e` (and a signalled task never reaches the end of the script). The trap preserves the task's exit status, so Nextflow still reports the failure; a SIGKILL cannot run it, which is why the pre-clean, not the trap, is the guarantee for the next attempt. The distance index cactus produced is archived as `<outname>.dist.bak` inside the task, so `CACTUS_PANGENOME` publishes no file named `<outname>.dist` (which avoids racing the promoted index, see below).
 
 `VG_INDEX_DIST_UPDATE` then rebuilds the distance index and promotes it to the primary filename: `vg index -j ref/<outname>.dist2 ref/<outname>.gbz`, then `mv ref/<outname>.dist2 ref/<outname>.dist`. The cactus index was already renamed to `<outname>.dist.bak`, so the published `<outname>.dist` is the rebuilt index and every `dist` consumer (`vg giraffe -d`) uses it — exactly the notebook sequence (S05 L26–28). `<outname>.dist2` is an intermediate and is never published.
 
@@ -213,6 +215,7 @@ Notes:
 - **The vg image supplies htslib.** `VG_CALL` pipes `vg call` into `bgzip -c`, and the vgteam image ships htslib tools; that is why the pinned image covers this step without any extra environment.
 - **`vg call -z` is DNA-only.** S06 L56 copies `-z` from the DNA command, but `-z` restricts calling to the GBZ haplotypes and `vg call` rejects it for a non-GBZ graph, so `VG_CALL` passes it only when the graph is the GBZ (`graph_is_gbz`); the RNA (`-a` only) and DNA (`-z -a`) flag sets are otherwise unchanged from the notebooks.
 - **RNA cross-sample merge (requested extension).** S06 stops at a per-sample `bcftools query`; at the user's request the RNA VCFs are now indexed, merged and queried per assay exactly like the DNA ones, using the shared modules, so the pipeline produces `rna/combined.vcf.gz` and `rna/combined.vcf.tsv.gz` instead of per-sample TSVs. There is no notebook source for this step (see provenance).
+- **Toil scratch is transient.** `CACTUS_PANGENOME` deletes `<outdir>/toil_work` before it creates the jobstore and removes it again from an `EXIT` trap (see the reference workflow section). The jobstore of a failed run is therefore *not* preserved: the pipeline never resumes one — it always hands cactus a fresh jobstore at that path and passes no resume flag — a partially completed cactus run cannot be continued through the pipeline anyway, and the scratch can run to hundreds of GB. A failed run is re-run from scratch, which is the only thing the pipeline supports. The pre-clean also assumes one pipeline run per `--outdir` at a time, which `publishDir` already requires.
 
 ## Known limitations
 
@@ -220,10 +223,10 @@ Notes:
 - `--viz` is passed to `cactus-pangenome` as is; the cactus image must provide its dependencies (vg/odgi — the official toolkit image does).
 - Real runs need an x86-64 Linux host. cactus requires an AVX2-capable x86-64 CPU and the pinned cactus and bcftools images are linux/amd64 only; Apple-silicon emulation provides no AVX2, and vg is the only tool with an arm64 image. macOS hosts are therefore limited to the `-stub-run` smoke test.
 - There is no Conda or host fallback. With no container engine profile enabled, Nextflow ignores every `container` directive and each tool must be on `PATH`; the failure mode is a tool-level error (e.g. `cactus-pangenome: command not found`), not a configuration error.
-- The container images were **not** pulled in this repository (the smoke test is stub-only): the `docker`, `podman` and `apptainer` profiles are verified by config resolution and the directive contract, not by a real run.
+- The container images were **not** pulled in this repository (the smoke test is stub-only, apart from step 8's fake tool, which runs without any engine): the `docker`, `podman` and `apptainer` profiles are verified by config resolution and the directive contract, not by a real run.
 - Cactus resources are estimates (64 GB RAM / 48 h per process) and must be tuned to the assemblies; all other processes default to 1 CPU, 8 GB, 8 h, with per-process overrides in `nextflow.config`.
 - `publish_dir_mode` defaults to `copy`, which will copy large GAM/pack files. `symlink` is recommended for real runs.
-- `CACTUS_PANGENOME` deletes `<outdir>/toil_work` only when it succeeds. A failed or interrupted cactus run leaves the Toil jobstore behind, and rerunning into the same `--outdir` will hand Toil an existing jobstore; remove `<outdir>/toil_work` manually before such a rerun.
+- `CACTUS_PANGENOME` clears and removes `<outdir>/toil_work` itself (see the reference workflow section). One case cannot be trapped: a task killed with SIGKILL (Nextflow abort, host OOM, crash) leaves the scratch behind, so the disk stays occupied — but a rerun into the same `--outdir` is never blocked, because the next attempt deletes the stale scratch before it creates its jobstore. A failed run's Toil jobstore is deliberately not preserved (see the design decisions), so a partially completed cactus run cannot be restarted from it.
 - `RENAME_GTF` runs on the host with `sed`, so `bin/` must be reachable on `PATH`. It assumes a tab-delimited GTF: lines without a tab are passed through unprefixed rather than guessed at.
 - RNA and DNA are merged separately, one `combined.vcf.gz`/`combined.vcf.tsv.gz` per assay: there is no cross-assay merge, and cross-assay comparison stays downstream.
 - `--rna_call_sample` sets a single fixed `vg call -s` for every RNA sample, so with more than one RNA sample the per-sample VCFs share a sample column and `bcftools merge` fails on duplicate sample names. Leave it unset (the default: sample id) unless the run has a single RNA sample.
@@ -265,7 +268,7 @@ bash test/run_smoke.sh
 READS=500 bash test/run_smoke.sh      # smaller inputs, quicker run
 ```
 
-Requirements: the vendored Nextflow launcher at `./nextflow` (it pins `NXF_VER=26.04.6`) and `python3` (standard library only) to generate the reads. Everything runs with `-stub-run` — process stubs only, no containers, **no biological results are produced**; this is a connectivity/syntax test.
+Requirements: the vendored Nextflow launcher at `./nextflow` (it pins `NXF_VER=26.04.6`) and `python3` (standard library only) to generate the reads. Everything runs with `-stub-run` — process stubs only, no containers, **no biological results are produced**; this is a connectivity/syntax test. The one exception is step 8, which runs the real `CACTUS_PANGENOME` script body against a fake `cactus-pangenome` on `PATH` (still no container, no cactus, no biology) because a stub cannot exercise the Toil-scratch cleanup.
 
 Inputs are the generated reads described under [Test data](#test-data), with neutral names (`ref_a`/`ref_b`, `dna_a`/`dna_b`/`dna_hybrid`/`dna_c`, `rna_a`/`rna_b`) covering all four assay/layout combinations. The seqfile `test/assemblies.txt` is committed with repo-relative paths and is left untouched (its content is never read under `-stub-run`); the script removes `work/` and `test/results/` before and after the run (`trap clean EXIT`), and the generated reads are inputs and are left in place.
 
@@ -279,6 +282,7 @@ Steps:
 5. **Default entry (`both`)** — one run with `-with-dag`, asserting both DNA and RNA outputs exist, the DAG file is non-empty, and `CACTUS_PANGENOME` appears exactly once in the DAG (single shared reference).
 6. **Single-sample assays** — one `--run dnaseq` and one `--run rnaseq` with a samplesheet holding exactly one row per assay: asserts the run succeeds, publishes `<assay_dir>/<sample>.vcf.gz` and `<assay_dir>/combined.vcf.tsv.gz`, publishes **no** `<sample>.vcf.gz.csi` and **no** `combined.vcf.gz`, and does not submit `BCFTOOLS_INDEX`/`BCFTOOLS_MERGE` (checked in the captured run log).
 7. **Negative tests** — samplesheets with a bogus assay and with an empty `fastq_1` must fail, and the error messages must contain `Unknown assay` / `fastq_1 missing`.
+8. **cactus Toil scratch** — the only non-stub run: the real `CACTUS_PANGENOME` script body with a fake `cactus-pangenome` first on `PATH` (no container engine is enabled, so the `container` directive is ignored and the tool is resolved from `PATH`). The fake mimics Toil — it refuses to reuse an existing jobstore, otherwise creates one and then fails like a cactus error — and `test/results/toil_work/js` is pre-created to stand in for scratch a previous attempt left behind. Asserts that the run fails, that the fake saw a *fresh* jobstore (so the stale scratch was cleared before cactus started) and never the "already exists" case, and that no `toil_work` survives the failed task.
 
 Success ends with `ALL SMOKE TESTS PASSED`.
 
