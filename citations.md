@@ -1,10 +1,10 @@
 # Citations
 
-Please cite Hybseq and its dependencies if you use Hybseq in research.
+Please cite HybSeq and its dependencies if you use Hybseq in research.
 
 ## Hybseq
 
-Ziyang Zhu, Jiawen Jiang, Ran Zhao, Lijuan Zhu, Hong Zhang. Hybseq: a Nextflow-based pangenome pipeline for processing sequencing data from interspecific hybrids. Unpublished. 2026.
+Ziyang Zhu, Jiawen Jiang, Ran Zhao, Lijuan Zhu, Feng Zhou, Hong Zhang. HybSeq: a Nextflow-based pangenome pipeline for processing sequencing data from interspecific hybrids. Unpublished. 2026.
 
 ## Core dependencies
 
