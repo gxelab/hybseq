@@ -173,13 +173,14 @@ Resource note: cactus RAM/time are config defaults (64 GB / 48 h) and should be 
 
 ### Run the full pipeline
 
-The following command runs the complete HybSeq pipeline using Apptainer and locally stored SIF images. The reference graph is constructed once and then used for both DNA-seq and RNA-seq analyses.
+The following command runs the complete HybSeq pipeline using Apptainer and remote or locally stored SIF images.
 
 ```bash
+# Run with container images automatically pulled from quay.io
 nextflow run . -profile apptainer \
     --assemblies assemblies.txt --samplesheet samplesheet.csv --gtf annotation.gtf
 
-# use local images
+# Run with locally available Apptainer images
 nextflow run . -profile apptainer \
     --vg_sif /path/to/vg.sif --cactus_sif /path/to/cactus.sif --bcftools_sif /path/to/bcftools.sif \
     --assemblies assemblies.txt --samplesheet samplesheet.csv --gtf annotation.gtf
