@@ -1,6 +1,6 @@
 # HybSeq  <img src="logo_light.svg" align="right" height="138" alt="HybSeq Logo" />
 
-A [Nextflow](https://github.com/nextflow-io/nextflow) pipeline for **pangenome-graph based processing of DNA-seq and RNA-seq data from interspecific hybrids** built with [Minigraph-Cactus](https://github.com/ComparativeGenomicsToolkit/cactus), [vg](https://github.com/vgteam/vg), [bcftools][https://github.com/samtools/bcftools] and [htslib](https://github.com/samtools/htslib).
+A [Nextflow](https://github.com/nextflow-io/nextflow) pipeline for **pangenome-graph based processing of DNA-seq and RNA-seq data from interspecific hybrids** built with [Minigraph-Cactus](https://github.com/ComparativeGenomicsToolkit/cactus), [vg](https://github.com/vgteam/vg), [bcftools](https://github.com/samtools/bcftools) and [htslib](https://github.com/samtools/htslib).
 
 The pipeline first constructs a pangenome graph from the genome assemblies of the two parental species. It then maps short reads to the graph, using a spliced graph derived from the reference graph for RNA-seq data. Read support is subsequently quantified, variants are called for each sample, and results are tabulated by assay. DNA-seq and RNA-seq are implemented as separate workflows but share the same reference graph and downstream steps for read-support calculation, variant calling, and result tabulation.
 
