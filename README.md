@@ -1,10 +1,8 @@
 # HybSeq  <img src="logo_light.svg" align="right" height="138" alt="HybSeq Logo" />
 
-A Nextflow pipeline for **pangenome-graph based processing of interspecies hybrid genomic data** (DNA-seq and RNA-seq) built with [Minigraph-Cactus](https://github.com/ComparativeGenomicsToolkit/cactus) and [vg](https://github.com/vgteam/vg).
+A [Nextflow](https://github.com/nextflow-io/nextflow) pipeline for **pangenome-graph based processing of DNA-seq and RNA-seq data from interspecific hybrids** built with [Minigraph-Cactus](https://github.com/ComparativeGenomicsToolkit/cactus), [vg](https://github.com/vgteam/vg), [bcftools][https://github.com/samtools/bcftools] and [htslib](https://github.com/samtools/htslib).
 
-The pipeline builds a pangenome graph from a reference assembly and one or more additional assemblies. It maps short reads to this graph, using a spliced graph derived from it for RNA-seq, then computes read support, calls variants for each sample, and tabulates the results by assay.
-
-DNA-seq and RNA-seq are implemented as separate workflows, but share the same reference graph and the same downstream steps for read-support calculation, variant calling, and result tabulation.
+The pipeline first constructs a pangenome graph from the genome assemblies of the two parental species. It then maps short reads to the graph, using a spliced graph derived from the reference graph for RNA-seq data. Read support is subsequently quantified, variants are called for each sample, and results are tabulated by assay. DNA-seq and RNA-seq are implemented as separate workflows but share the same reference graph and downstream steps for read-support calculation, variant calling, and result tabulation.
 
 ## Installation
 
@@ -12,7 +10,7 @@ DNA-seq and RNA-seq are implemented as separate workflows, but share the same re
 
 Before installing HybSeq, ensure that the following software is available:
 
-- **Nextflow (≥ 26.04):** Install [Nextflow](https://nextflow.io/), which requires Java 17 or later. Nextflow can be installed from the command line, via Bioconda, or by downloading it from [GitHub](https://github.com/nextflow-io/nextflow).
+- **Nextflow (≥ 26.04):** HybSeq use [Nextflow](https://nextflow.io/) as its workflow management system. Nextflow can be installed from the command line, via Bioconda, or by downloading it from [GitHub](https://github.com/nextflow-io/nextflow).
 - **Apptainer:** Install [Apptainer](https://apptainer.org/docs/admin/main/installation.html#installation-on-linux) to run HybSeq using the `apptainer` profile.
 
 ### Obtain HybSeq
